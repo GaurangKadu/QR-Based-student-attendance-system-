@@ -1,0 +1,8 @@
+{
+  "name": "QR Code Digital Attendance System",
+  "description": "Digital Student Attendance Management System with QR Code Scanner and Analytics for IT Engineering mini projects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
