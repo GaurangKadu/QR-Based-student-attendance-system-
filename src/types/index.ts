@@ -19,10 +19,16 @@ export interface ClassItem {
   division: string;     // e.g., "A"
   subject: string;      // e.g., "Data Structures"
   totalStudents?: number; // e.g., 60
+  classroomName?: string;
+  latitude?: number;
+  longitude?: number;
+  radius?: number;      // in metres
+  geofenceActive?: boolean; // whether GPS geofence boundary is currently active
 }
 
 export interface AttendanceSession {
   sessionId: string;
+  dailyCode?: string;   // 6-digit unique daily attendance passcode e.g., "849201"
   classId: string;
   subject: string;
   teacherId: string;

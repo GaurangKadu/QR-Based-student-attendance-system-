@@ -152,18 +152,28 @@ export const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
         {copied ? <CheckCircle className="w-3 h-3 text-emerald-600 inline" /> : null}
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-2">
+      <div className="mt-5 grid grid-cols-3 gap-2">
         <button
           onClick={handleDownload}
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition"
+          className="flex items-center justify-center gap-1 px-2 py-2.5 min-h-[40px] bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-semibold transition"
         >
           <Download className="w-3.5 h-3.5" /> Download
         </button>
         <button
-          onClick={handlePrint}
-          className="flex items-center justify-center gap-1.5 px-3 py-2.5 min-h-[40px] bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+          onClick={() => {
+            const text = encodeURIComponent(`Digital Student Attendance Pass for ${student.name} (Roll No: ${student.rollNo || 'N/A'}, ID: ${student.userId}). QR Key: ${student.qrId}`);
+            window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+          }}
+          className="flex items-center justify-center gap-1 px-2 py-2.5 min-h-[40px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+          title="Share on WhatsApp"
         >
-          <Printer className="w-3.5 h-3.5" /> Print Card
+          <span>💬 WhatsApp</span>
+        </button>
+        <button
+          onClick={handlePrint}
+          className="flex items-center justify-center gap-1 px-2 py-2.5 min-h-[40px] bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-sm transition"
+        >
+          <Printer className="w-3.5 h-3.5" /> Print
         </button>
       </div>
     </div>

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { StorageService } from '../../services/storageService';
 import { ClassItem, AttendanceSession } from '../../types';
-import { QRScannerModal } from '../QRScannerModal';
+import { SessionQRModal } from './SessionQRModal';
+import { ClassDetailModal } from './ClassDetailModal';
+import { CreateClassModal } from './CreateClassModal';
 import {
   BookOpen,
   Layers,
   QrCode,
-  Users,
-  Play,
   CheckCircle2,
-  Sparkles
+  Sparkles,
+  Plus
 } from 'lucide-react';
 
 export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, classId?: string) => void }> = ({ onNavigate }) => {
@@ -17,7 +18,9 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(
     StorageService.getSessions().find(s => s.status === 'active') || null
   );
-  const [showScanner, setShowScanner] = useState<boolean>(false);
+  const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
+  const [selectedClassForModal, setSelectedClassForModal] = useState<ClassItem | null>(null);
 
   const refreshData = () => {
     setClasses(StorageService.getClasses());
@@ -28,7 +31,15 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
     e.stopPropagation();
     const sess = StorageService.startSession(cls.classId, cls.subject, 'Teacher1');
     setActiveSession(sess);
-    setShowScanner(true);
+    setShowSessionModal(true);
+    refreshData();
+  };
+
+  const handleStartSessionFromModal = (cls: ClassItem) => {
+    const sess = StorageService.startSession(cls.classId, cls.subject, 'Teacher1');
+    setActiveSession(sess);
+    setSelectedClassForModal(null);
+    setShowSessionModal(true);
     refreshData();
   };
 
@@ -41,18 +52,29 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
             <BookOpen className="w-7 h-7 text-blue-600 dark:text-blue-400" /> Class Room Management
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Click any classroom to view student roster and attendance history, or launch the Live QR Scanner.
+            Click any classroom card to open the student analytical board and student management roster.
           </p>
         </div>
 
-        {activeSession && (
+        <div className="flex items-center gap-3 flex-wrap">
           <button
-            onClick={() => setShowScanner(true)}
-            className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0 animate-pulse"
+            type="button"
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
           >
-            <QrCode className="w-4 h-4" /> Open Active Scanner
+            <Plus className="w-4 h-4" /> Create New Class
           </button>
-        )}
+
+          {activeSession && (
+            <button
+              type="button"
+              onClick={() => setShowSessionModal(true)}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
+            >
+              <QrCode className="w-4 h-4" /> View Active Session QR
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Class Rooms List / Grid Section */}
@@ -61,7 +83,6 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
           const students = StorageService.getStudents().filter(s => s.classId === cls.classId);
           const total = students.length;
           
-          // Calculate present students based on latest session for this class or active records
           const sessionRecords = activeSession && activeSession.classId === cls.classId
             ? StorageService.getAttendanceForSession(activeSession.sessionId)
             : StorageService.getAttendanceRecords().filter(r => r.classId === cls.classId);
@@ -69,14 +90,13 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
           const presentIds = new Set(sessionRecords.filter(r => r.status === 'PRESENT').map(r => r.studentId));
           const present = presentIds.size;
           const absent = Math.max(0, total - present);
-          const remaining = Math.max(0, (cls.totalStudents || total) - total);
           const hasActiveSess = activeSession?.classId === cls.classId;
 
           return (
             <div
               key={cls.classId}
               className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 group"
-              onClick={() => onNavigate('students', cls.classId)}
+              onClick={() => setSelectedClassForModal(cls)}
             >
               <div>
                 <div className="flex items-start justify-between gap-2">
@@ -85,8 +105,8 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
                   </span>
 
                   {hasActiveSess && (
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping"></span> Live Session
+                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shadow-xs shadow-emerald-400"></span> Live • Code: {activeSession?.dailyCode || 'Active'}
                     </span>
                   )}
                 </div>
@@ -128,7 +148,7 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
                   }`}
                 >
                   <QrCode className="w-4 h-4" />
-                  {hasActiveSess ? 'Open Live Scanner' : 'Scan Class Attendance'}
+                  {hasActiveSess ? 'View Session QR' : 'Start Attendance & QR'}
                 </button>
               </div>
             </div>
@@ -136,15 +156,37 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
         })}
       </div>
 
-      {/* Modal: Live QR Scanner */}
-      {showScanner && activeSession && (
-        <QRScannerModal
-          session={activeSession}
-          onClose={() => {
-            setShowScanner(false);
+      {/* Modal: Create Class */}
+      {showCreateModal && (
+        <CreateClassModal
+          onClose={() => setShowCreateModal(false)}
+          onSuccess={() => {
             refreshData();
           }}
-          onScanSuccess={refreshData}
+        />
+      )}
+
+      {/* Modal: Class Detail / Student Analytical Board & Management */}
+      {selectedClassForModal && (
+        <ClassDetailModal
+          cls={selectedClassForModal}
+          activeSession={activeSession}
+          onClose={() => {
+            setSelectedClassForModal(null);
+            refreshData();
+          }}
+          onStartSession={handleStartSessionFromModal}
+        />
+      )}
+
+      {/* Modal: Session QR Modal */}
+      {showSessionModal && activeSession && (
+        <SessionQRModal
+          session={activeSession}
+          onClose={() => {
+            setShowSessionModal(false);
+            refreshData();
+          }}
         />
       )}
     </div>

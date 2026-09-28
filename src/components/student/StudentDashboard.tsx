@@ -2,13 +2,25 @@ import React, { useState } from 'react';
 import { User } from '../../types';
 import { StorageService } from '../../services/storageService';
 import { QRCodeGenerator } from '../QRCodeGenerator';
+import { StudentQRScannerModal } from './StudentQRScannerModal';
+import {
+  playBigSuccessSound,
+  playDuplicateWarningSound,
+  playErrorSound
+} from '../../utils/audioAlert';
+import confetti from 'canvas-confetti';
 import {
   QrCode,
   Calendar,
   CheckCircle2,
   XCircle,
   BookOpen,
-  Clock
+  Clock,
+  Navigation,
+  KeyRound,
+  Check,
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 
 interface StudentDashboardProps {
@@ -16,10 +28,73 @@ interface StudentDashboardProps {
 }
 
 export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) => {
-  const studentStats = StorageService.getStudentStats(student.userId);
+  const [studentStats, setStudentStats] = useState(StorageService.getStudentStats(student.userId));
   const studentClass = StorageService.getClassById(student.classId || '');
 
   const [activeTab, setActiveTab] = useState<'qr' | 'history'>('qr');
+  const [showStudentScanner, setShowStudentScanner] = useState<boolean>(false);
+  const [quickCodeInput, setQuickCodeInput] = useState<string>('');
+  const [isSubmittingQuickCode, setIsSubmittingQuickCode] = useState<boolean>(false);
+  const [quickFeedback, setQuickFeedback] = useState<{
+    type: 'success' | 'duplicate' | 'error';
+    message: string;
+  } | null>(null);
+
+  const refreshStudentStats = () => {
+    setStudentStats(StorageService.getStudentStats(student.userId));
+  };
+
+  const handleQuickCodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickCodeInput.trim() || isSubmittingQuickCode) return;
+
+    setIsSubmittingQuickCode(true);
+    setQuickFeedback(null);
+
+    const proceed = (lat?: number, lon?: number) => {
+      const res = StorageService.markAttendance(quickCodeInput.trim(), student.userId, lat, lon);
+      setIsSubmittingQuickCode(false);
+
+      if (res.success && res.record) {
+        setQuickFeedback({
+          type: 'success',
+          message: `✓ Attendance Marked Successfully! (${res.session?.subject || 'Class Lecture'})`,
+        });
+        playBigSuccessSound();
+        try {
+          confetti({ particleCount: 40, spread: 70, origin: { y: 0.6 } });
+        } catch {}
+        setQuickCodeInput('');
+        refreshStudentStats();
+      } else {
+        const isDuplicate = res.message.toLowerCase().includes('already') || res.message.toLowerCase().includes('duplicate');
+        setQuickFeedback({
+          type: isDuplicate ? 'duplicate' : 'error',
+          message: res.message || 'Unable to verify code.',
+        });
+
+        if (isDuplicate) {
+          playDuplicateWarningSound();
+        } else {
+          playErrorSound();
+        }
+      }
+
+      setTimeout(() => {
+        setQuickFeedback(null);
+      }, 5000);
+    };
+
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => proceed(pos.coords.latitude, pos.coords.longitude),
+        () => proceed(undefined, undefined),
+        { timeout: 3000 }
+      );
+    } else {
+      proceed(undefined, undefined);
+    }
+  };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -58,6 +133,76 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
         </div>
       </div>
 
+      {/* QUICK DAILY PASSCODE CHECK-IN BAR */}
+      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm transition-colors space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 rounded-xl">
+              <KeyRound className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                Quick Attendance Check-In with Daily Code
+                <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                If camera is not scanning, enter the 6-digit Daily Code shown on class projector:
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowStudentScanner(true)}
+            className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+          >
+            <Navigation className="w-4 h-4 text-emerald-400" /> Open Scanner & Passcode Modal
+          </button>
+        </div>
+
+        <form onSubmit={handleQuickCodeSubmit} className="flex flex-col sm:flex-row gap-2.5 pt-1">
+          <input
+            type="text"
+            value={quickCodeInput}
+            onChange={e => setQuickCodeInput(e.target.value)}
+            placeholder="Type 6-digit code (e.g. 849201)"
+            className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 dark:focus:border-blue-500 rounded-2xl text-base font-mono font-black text-slate-900 dark:text-white tracking-widest placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-slate-400 focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={!quickCodeInput.trim() || isSubmittingQuickCode}
+            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-extrabold text-xs rounded-2xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer shrink-0"
+          >
+            {isSubmittingQuickCode ? (
+              <span>Verifying...</span>
+            ) : (
+              <>
+                <Check className="w-4 h-4" /> Check In Attendance
+              </>
+            )}
+          </button>
+        </form>
+
+        {quickFeedback && (
+          <div
+            className={`p-3.5 rounded-2xl text-xs font-bold flex items-center gap-2.5 transition animate-in fade-in ${
+              quickFeedback.type === 'success'
+                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                : quickFeedback.type === 'duplicate'
+                ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                : 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+            }`}
+          >
+            {quickFeedback.type === 'success' ? (
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+            )}
+            <span>{quickFeedback.message}</span>
+          </div>
+        )}
+      </div>
+
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm transition-colors">
@@ -79,7 +224,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
             </div>
           </div>
           <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-2">{studentStats.presentCount}</p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Scanned present</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">Scanned / entered present</p>
         </div>
 
         <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-sm transition-colors">
@@ -98,7 +243,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
       <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2 overflow-x-auto no-scrollbar">
         <button
           onClick={() => setActiveTab('qr')}
-          className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold flex items-center gap-2 transition shrink-0 ${
+          className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold flex items-center gap-2 transition shrink-0 cursor-pointer ${
             activeTab === 'qr'
               ? 'bg-blue-600 text-white shadow-md'
               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
@@ -108,7 +253,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
         </button>
         <button
           onClick={() => setActiveTab('history')}
-          className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold flex items-center gap-2 transition shrink-0 ${
+          className={`px-4 py-2.5 min-h-[40px] rounded-xl text-xs font-extrabold flex items-center gap-2 transition shrink-0 cursor-pointer ${
             activeTab === 'history'
               ? 'bg-blue-600 text-white shadow-md'
               : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800'
@@ -120,16 +265,40 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({ student }) =
 
       {/* Tab 1: QR Pass Display */}
       {activeTab === 'qr' && (
-        <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm max-w-lg mx-auto transition-colors">
-          <div className="text-center mb-4">
-            <h2 className="font-extrabold text-slate-900 dark:text-white text-lg">Digital Attendance QR Pass</h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Display this QR code on your mobile phone screen during class for camera scanning by the professor.
-            </p>
+        <div className="space-y-4 max-w-lg mx-auto">
+          {/* Scan Professor's QR Button */}
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-3xl p-5 text-white shadow-lg flex items-center justify-between">
+            <div>
+              <h3 className="font-extrabold text-sm">Classroom Geofence Check-In</h3>
+              <p className="text-xs text-blue-100 mt-0.5">Scan class QR or enter unique daily passcode to mark present.</p>
+            </div>
+            <button
+              onClick={() => setShowStudentScanner(true)}
+              className="px-4 py-3 bg-white text-blue-700 font-extrabold rounded-2xl text-xs shadow-md hover:bg-blue-50 transition flex items-center gap-2 shrink-0 cursor-pointer"
+            >
+              <Navigation className="w-4 h-4 text-blue-600" /> Check-In Scanner
+            </button>
           </div>
 
-          <QRCodeGenerator student={student} showCard={true} size={220} />
+          <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm transition-colors">
+            <div className="text-center mb-4">
+              <h2 className="font-extrabold text-slate-900 dark:text-white text-lg">Digital Attendance QR Pass</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Display this personal QR pass on your screen during class if the professor is scanning student passes directly.
+              </p>
+            </div>
+
+            <QRCodeGenerator student={student} showCard={true} size={220} />
+          </div>
         </div>
+      )}
+
+      {showStudentScanner && (
+        <StudentQRScannerModal
+          student={student}
+          onClose={() => setShowStudentScanner(false)}
+          onScanSuccess={refreshStudentStats}
+        />
       )}
 
       {/* Tab 2: Attendance History */}

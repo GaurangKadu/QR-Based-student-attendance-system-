@@ -4,15 +4,16 @@ import { AuthService } from './services/authService';
 import { Sidebar } from './components/Sidebar';
 import { LoginPage } from './components/LoginPage';
 import { TeacherDashboardOverview } from './components/teacher/TeacherDashboardOverview';
-import { StudentManagement } from './components/teacher/StudentManagement';
 import { AttendanceSessionManager } from './components/teacher/AttendanceSessionManager';
+import { CalendarView } from './components/teacher/CalendarView';
 import { ReportsView } from './components/teacher/ReportsView';
+import { GeofenceSettingsView } from './components/teacher/GeofenceSettingsView';
 import { StudentDashboard } from './components/student/StudentDashboard';
 import { Clock, ShieldCheck } from 'lucide-react';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<string>('dashboard');
+  const [activeTab, setActiveTab] = useState<string>('attendance');
   const [targetClassId, setTargetClassId] = useState<string | undefined>(undefined);
   const [now, setNow] = useState<Date>(new Date());
 
@@ -25,7 +26,7 @@ export default function App() {
     const user = AuthService.getCurrentUser();
     if (user) {
       setCurrentUser(user);
-      setActiveTab(user.role === 'student' ? 'student_dash' : 'dashboard');
+      setActiveTab(user.role === 'student' ? 'student_dash' : 'attendance');
     }
   }, []);
 
@@ -37,7 +38,7 @@ export default function App() {
   const handleUserChange = (user: User | null) => {
     setCurrentUser(user);
     if (user) {
-      setActiveTab(user.role === 'student' ? 'student_dash' : 'dashboard');
+      setActiveTab(user.role === 'student' ? 'student_dash' : 'attendance');
     }
   };
 
@@ -82,9 +83,9 @@ export default function App() {
           {/* Tab Content Rendering */}
           {currentUser.role === 'teacher' ? (
             <>
-              {activeTab === 'dashboard' && <TeacherDashboardOverview onNavigate={handleNavigate} />}
-              {activeTab === 'students' && <StudentManagement initialClassId={targetClassId} />}
-              {activeTab === 'attendance' && <AttendanceSessionManager onNavigate={handleNavigate} />}
+              {(activeTab === 'attendance' || activeTab === 'dashboard') && <AttendanceSessionManager onNavigate={handleNavigate} />}
+              {activeTab === 'calendar' && <CalendarView />}
+              {activeTab === 'geofence' && <GeofenceSettingsView />}
               {activeTab === 'reports' && <ReportsView />}
             </>
           ) : (

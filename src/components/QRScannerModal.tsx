@@ -24,7 +24,6 @@ import {
   Check,
   ShieldCheck,
   HelpCircle,
-  FlipHorizontal,
   VideoOff,
   Volume2
 } from 'lucide-react';
@@ -66,6 +65,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const lastScannedTextRef = useRef<string>('');
   const isScanningActiveRef = useRef<boolean>(false);
 
+  // Stable callback refs to prevent any re-render loops
+  const onScanSuccessRef = useRef(onScanSuccess);
+  onScanSuccessRef.current = onScanSuccess;
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+
   const activeClass = StorageService.getClassById(session.classId);
   const classStudents = StorageService.getStudents().filter(
     s => s.classId === session.classId && s.status === 'active'
@@ -99,7 +104,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     lastScannedTextRef.current = trimmed;
     lastScannedTimeRef.current = now;
 
-    const res = StorageService.markAttendance(session.sessionId, trimmed);
+    const currentSession = sessionRef.current;
+    const res = StorageService.markAttendance(currentSession.sessionId, trimmed);
 
     if (res.success && res.record) {
       const student = StorageService.findStudent(trimmed) || StorageService.getUserById(res.record.studentId);
@@ -112,12 +118,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         time: res.record.time,
       });
 
-      // BIG LOUD SOUND & VISUAL FLASH
       playBigSuccessSound();
       setSuccessFlash(true);
       setTimeout(() => setSuccessFlash(false), 800);
       triggerConfetti();
-      onScanSuccess();
+      onScanSuccessRef.current();
     } else {
       const isDuplicate = res.message.toLowerCase().includes('duplicate') || res.message.toLowerCase().includes('already');
       
@@ -136,7 +141,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     setTimeout(() => {
       setScanResult(null);
     }, 4500);
-  }, [session.sessionId, onScanSuccess, triggerConfetti]);
+  }, [triggerConfetti]);
+
+  // Keep processQrData ref stable
+  const handleProcessRef = useRef(handleProcessQrData);
+  handleProcessRef.current = handleProcessQrData;
 
   const stopCameraStream = useCallback(() => {
     isScanningActiveRef.current = false;
@@ -166,14 +175,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const canvas = canvasRef.current;
 
     if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-      // 1. Check Native Hardware BarcodeDetector if supported (Chrome/Android/Edge)
+      // 1. Check Native Hardware BarcodeDetector if supported
       if ('BarcodeDetector' in window) {
         try {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
           const barcodes = await detector.detect(video);
           if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
-            handleProcessQrData(barcodes[0].rawValue);
+            handleProcessRef.current(barcodes[0].rawValue);
           }
         } catch {
           // fallback to jsQR below
@@ -182,7 +191,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       // 2. jsQR Canvas Decoder
       if (canvas && video.videoWidth > 0 && video.videoHeight > 0) {
-        // Optimal scan dimensions
         const scanWidth = Math.min(640, video.videoWidth);
         const scanHeight = Math.min(480, Math.round((scanWidth / video.videoWidth) * video.videoHeight));
 
@@ -197,7 +205,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               inversionAttempts: 'attemptBoth',
             });
             if (code && code.data && code.data.trim()) {
-              handleProcessQrData(code.data);
+              handleProcessRef.current(code.data);
             }
           } catch {
             // ignore frame parse glitch
@@ -209,14 +217,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     if (isScanningActiveRef.current) {
       animationFrameRef.current = requestAnimationFrame(scanFrame);
     }
-  }, [handleProcessQrData]);
+  }, []);
 
   const startCameraStream = useCallback(async () => {
     stopCameraStream();
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraPermissionState('unsupported');
-      setCameraErrorMsg('Camera API is not supported in this browser. Please use Quick Tap or Manual ID.');
+      setCameraErrorMsg('Camera API is not supported in this browser window. Please use Quick Tap or Roll Number.');
       return;
     }
 
@@ -270,14 +278,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       isScanningActiveRef.current = true;
       animationFrameRef.current = requestAnimationFrame(scanFrame);
     } else {
-      const errString = lastError instanceof Error ? lastError.name : String(lastError);
+      const errString = lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError);
       setCameraPermissionState('denied');
-      if (errString.includes('NotAllowedError') || errString.includes('PermissionDeniedError')) {
-        setCameraErrorMsg('Camera access was denied by browser permissions. You can use Quick Tap, File Upload, or Manual ID below.');
+      if (errString.includes('NotAllowedError') || errString.includes('PermissionDeniedError') || errString.includes('denied')) {
+        setCameraErrorMsg('Camera access was denied by browser permissions. You can use 1-Tap Attendance or Roll Number below.');
       } else if (errString.includes('NotFoundError') || errString.includes('DevicesNotFoundError')) {
-        setCameraErrorMsg('No webcam or camera hardware detected on this device.');
+        setCameraErrorMsg('No webcam or camera device was detected on this system.');
       } else {
-        setCameraErrorMsg('Camera hardware or permission is unavailable in this browser. Use 1-Tap Attendance or Manual ID below.');
+        setCameraErrorMsg('Camera hardware or permission is currently unavailable. Use 1-Tap Attendance below.');
       }
     }
   }, [cameraFacingMode, scanFrame, stopCameraStream]);
@@ -345,10 +353,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }, 250);
   };
 
-  const toggleCameraFacingMode = () => {
-    setCameraFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
-  };
-
   const filteredRoster = classStudents.filter(s =>
     s.name.toLowerCase().includes(rosterSearch.toLowerCase()) ||
     (s.rollNo && s.rollNo.includes(rosterSearch)) ||
@@ -356,7 +360,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto animate-fade-in">
+    <div className="fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-xl w-full overflow-hidden border border-slate-200 dark:border-slate-800 my-auto transition-colors flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-indigo-950 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
@@ -375,8 +379,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Test Big Sound Button */}
             <button
+              type="button"
               onClick={playBigSuccessSound}
               title="Test Scanner Sound (Big Chime)"
               className="p-2 rounded-xl text-slate-300 hover:text-white bg-slate-800/80 hover:bg-slate-700 transition flex items-center gap-1 text-xs font-bold cursor-pointer"
@@ -386,6 +390,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               aria-label="Close"
               className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition min-h-[40px] min-w-[40px] flex items-center justify-center cursor-pointer"
@@ -414,6 +419,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {/* Mode Navigation Tabs */}
         <div className="grid grid-cols-4 p-1.5 bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs font-bold shrink-0">
           <button
+            type="button"
             onClick={() => setActiveTab('camera')}
             className={`py-2 px-1 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'camera'
@@ -425,6 +431,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             <span className="hidden sm:inline">Camera</span> Scan
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('roster')}
             className={`py-2 px-1 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'roster'
@@ -436,6 +443,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             <span className="hidden sm:inline">Quick</span> Tap
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('upload')}
             className={`py-2 px-1 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'upload'
@@ -447,6 +455,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             Upload QR
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('manual')}
             className={`py-2 px-1 rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer ${
               activeTab === 'manual'
@@ -462,7 +471,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {/* Scan Status Toast Banner with Large Text & Sound Feedback */}
         {scanResult && (
           <div
-            className={`p-4 mx-4 mt-3 rounded-2xl border flex items-start gap-3.5 transition-all shrink-0 animate-in fade-in shadow-lg ${
+            className={`p-4 mx-4 mt-3 rounded-2xl border flex items-start gap-3.5 transition-all shrink-0 shadow-lg ${
               scanResult.type === 'success'
                 ? 'bg-emerald-600 text-white border-emerald-500 ring-4 ring-emerald-400/20'
                 : scanResult.type === 'duplicate'
@@ -471,7 +480,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }`}
           >
             {scanResult.type === 'success' ? (
-              <CheckCircle2 className="w-7 h-7 text-emerald-100 shrink-0 mt-0.5 animate-bounce" />
+              <CheckCircle2 className="w-7 h-7 text-emerald-100 shrink-0 mt-0.5" />
             ) : (
               <AlertTriangle className="w-7 h-7 text-amber-100 shrink-0 mt-0.5" />
             )}
@@ -506,7 +515,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           {activeTab === 'camera' && (
             <div className="space-y-4">
               <div
-                className={`relative rounded-3xl overflow-hidden bg-slate-950 border-2 transition-all min-h-[260px] flex items-center justify-center shadow-inner ${
+                className={`relative rounded-3xl overflow-hidden bg-slate-950 border-2 min-h-[260px] flex items-center justify-center shadow-inner ${
                   successFlash ? 'border-emerald-500 ring-8 ring-emerald-500/30' : 'border-indigo-500/50'
                 }`}
               >
@@ -525,7 +534,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 {cameraPermissionState === 'granted' && (
                   <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
                     <div
-                      className={`w-52 h-52 border-2 rounded-2xl relative shadow-2xl transition-colors ${
+                      className={`w-52 h-52 border-2 rounded-2xl relative shadow-2xl ${
                         successFlash ? 'border-emerald-400 bg-emerald-500/20' : 'border-blue-400/80'
                       }`}
                     >
@@ -535,7 +544,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                       <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-blue-500"></div>
                       
                       {!successFlash && (
-                        <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-red-500 to-transparent absolute top-1/2 -translate-y-1/2 animate-pulse shadow-sm shadow-red-500"></div>
+                        <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent absolute top-1/2 -translate-y-1/2 shadow-sm shadow-cyan-400"></div>
                       )}
                     </div>
                     
@@ -545,27 +554,44 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                   </div>
                 )}
 
-                {/* Camera controls in live mode removed as requested */}
                 {/* Fallback Screen if camera is blocked/denied */}
                 {(cameraPermissionState === 'denied' || cameraPermissionState === 'unsupported') && (
-                  <div className="p-6 text-center text-slate-200 max-w-md space-y-3">
-                    <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto border border-amber-500/30">
+                  <div className="p-6 text-center text-slate-200 max-w-md space-y-3.5">
+                    <div className="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto border border-amber-500/30 shadow-md">
                       <VideoOff className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-sm text-white">Camera Access Notice</h4>
+                      <h4 className="font-extrabold text-sm text-white">Camera Access Denied or Unavailable</h4>
                       <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                        {cameraErrorMsg || 'Webcam permission was blocked or hardware is unavailable. You can retry permission or use the 1-Tap Attendance & Simulator options below.'}
+                        {cameraErrorMsg || 'Browser denied webcam permission. You can mark attendance using 1-Tap Quick Roster or Roll Number below.'}
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                    <div className="flex flex-col gap-2 pt-1">
                       <button
-                        onClick={startCameraStream}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                        type="button"
+                        onClick={() => setActiveTab('roster')}
+                        className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-1.5 cursor-pointer"
                       >
-                        <RefreshCw className="w-3.5 h-3.5" /> Retry Camera
+                        <Zap className="w-4 h-4 text-amber-400" /> Switch to 1-Tap Student Roster
                       </button>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('manual')}
+                          className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <KeyRound className="w-3.5 h-3.5" /> Roll / ID
+                        </button>
+                        <button
+                          type="button"
+                          onClick={startCameraStream}
+                          className="flex-1 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5" /> Retry Camera
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -601,6 +627,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                   </select>
 
                   <button
+                    type="button"
                     onClick={() => {
                       const student = StorageService.getUserById(selectedSimStudentId);
                       if (student) handleSimulatedScan(student);
@@ -653,6 +680,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                       </div>
 
                       <button
+                        type="button"
                         onClick={() => handleSimulatedScan(student)}
                         className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition cursor-pointer min-h-[36px] shrink-0 ${
                           isPresent
@@ -768,6 +796,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
             className="px-5 py-2 min-h-[38px] bg-slate-900 hover:bg-slate-800 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition cursor-pointer"
           >

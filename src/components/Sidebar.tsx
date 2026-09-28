@@ -18,7 +18,9 @@ import {
   X,
   ChevronRight,
   Clock,
-  BookOpen
+  BookOpen,
+  MapPin,
+  Calendar
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -56,9 +58,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const isTeacher = currentUser.role === 'teacher';
 
   const teacherNavItems = [
-    { id: 'dashboard', label: 'Overview Dashboard', icon: LayoutDashboard },
-    { id: 'students', label: 'Student Management', icon: Users },
     { id: 'attendance', label: 'Class Management', icon: BookOpen },
+    { id: 'calendar', label: 'Class Calendar', icon: Calendar },
+    { id: 'geofence', label: 'Geofence Settings', icon: MapPin },
     { id: 'reports', label: 'Reports & Analytics', icon: FileText },
   ];
 

@@ -7,7 +7,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Search,
-  Filter
+  Filter,
+  Calendar as CalendarIcon,
+  ChevronLeft,
+  ChevronRight,
+  MessageSquare
 } from 'lucide-react';
 
 export const ReportsView: React.FC = () => {
@@ -18,6 +22,8 @@ export const ReportsView: React.FC = () => {
 
   const [selectedClassFilter, setSelectedClassFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [calendarOpen, setCalendarOpen] = useState<boolean>(false);
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
 
   // Calculate Student Wise Attendance Percentage Report
   const studentReports = students.map(student => {
@@ -84,6 +90,17 @@ export const ReportsView: React.FC = () => {
     window.URL.revokeObjectURL(url);
   };
 
+  const handleWhatsAppShare = () => {
+    const text = encodeURIComponent(
+      `📊 *IT Engineering Attendance Report*\n` +
+      `• Total Students: ${totalStudentsCount}\n` +
+      `• Average Attendance: ${averagePercentage}%\n` +
+      `• Defaulters (<75%): ${defaultersCount}\n` +
+      `• Date: ${selectedDate.toLocaleDateString()}`
+    );
+    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+  };
+
   const totalStudentsCount = filteredReports.length;
   const defaultersCount = filteredReports.filter(r => r.isDefaulter).length;
   const averagePercentage = totalStudentsCount > 0
@@ -105,8 +122,14 @@ export const ReportsView: React.FC = () => {
 
         <div className="flex flex-wrap items-center gap-2">
           <button
-            onClick={handleExportCSV}
+            onClick={handleWhatsAppShare}
             className="px-4 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 transition"
+          >
+            <MessageSquare className="w-4 h-4" /> WhatsApp Share
+          </button>
+          <button
+            onClick={handleExportCSV}
+            className="px-4 py-2.5 min-h-[44px] bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-xs shadow-md flex items-center gap-1.5 transition"
           >
             <Download className="w-4 h-4" /> Export CSV Sheet
           </button>
@@ -167,12 +190,80 @@ export const ReportsView: React.FC = () => {
 
       {/* Report Table */}
       <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden p-1 transition-colors">
-        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <h2 className="font-extrabold text-slate-900 dark:text-white text-sm">Student-Wise Attendance Percentage Sheet</h2>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">Department of Information Technology Engineering</p>
           </div>
-          <span className="text-xs font-mono text-slate-400 dark:text-slate-500">Generated: {new Date().toLocaleDateString()}</span>
+
+          {/* Interactive Calendar Widget replacing static date */}
+          <div className="relative">
+            <button
+              onClick={() => setCalendarOpen(!calendarOpen)}
+              className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+            >
+              <CalendarIcon className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <span>Date: {selectedDate.toLocaleDateString()}</span>
+            </button>
+
+            {calendarOpen && (
+              <div className="absolute right-0 mt-2 z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl p-4 w-72">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-extrabold text-xs text-slate-900 dark:text-white">
+                    {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setSelectedDate(new Date(selectedDate.setMonth(selectedDate.getMonth() - 1)))}
+                      className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setSelectedDate(new Date())}
+                      className="text-[10px] font-bold px-2 py-1 bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-300 rounded-md"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => setSelectedDate(new Date(selectedDate.setMonth(selectedDate.getMonth() + 1)))}
+                      className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 mb-2">
+                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                  {Array.from({ length: 31 }, (_, i) => i + 1).map(day => {
+                    const isSelected = selectedDate.getDate() === day;
+                    return (
+                      <button
+                        key={day}
+                        onClick={() => {
+                          const newD = new Date(selectedDate);
+                          newD.setDate(day);
+                          setSelectedDate(newD);
+                          setCalendarOpen(false);
+                        }}
+                        className={`p-1.5 rounded-xl font-bold transition ${
+                          isSelected
+                            ? 'bg-blue-600 text-white shadow-sm'
+                            : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
+                        {day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -237,3 +328,4 @@ export const ReportsView: React.FC = () => {
     </div>
   );
 };
+

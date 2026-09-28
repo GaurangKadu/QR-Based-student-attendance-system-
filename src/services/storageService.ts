@@ -18,6 +18,7 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'A',
     subject: 'Data Structures & Algorithms',
     totalStudents: 60,
+    geofenceActive: true,
   },
   {
     classId: 'CLASS_SE_IT_B',
@@ -27,6 +28,7 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'B',
     subject: 'Database Management Systems',
     totalStudents: 60,
+    geofenceActive: true,
   },
   {
     classId: 'CLASS_TE_IT_A',
@@ -36,6 +38,7 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'A',
     subject: 'Software Engineering',
     totalStudents: 55,
+    geofenceActive: true,
   },
 ];
 
@@ -132,9 +135,24 @@ const getPastDateStr = (daysAgo: number) => {
 
 const TODAY_STR = new Date().toISOString().split('T')[0];
 
+export function generateDailyCode(seed?: string): string {
+  // Generate a clean 6-digit numeric code
+  if (seed) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash << 5) - hash + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const num = Math.abs(hash) % 900000 + 100000;
+    return num.toString();
+  }
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
 const INITIAL_SESSIONS: AttendanceSession[] = [
   {
     sessionId: 'SESS_001',
+    dailyCode: '492810',
     classId: 'CLASS_SE_IT_A',
     subject: 'Data Structures & Algorithms',
     teacherId: 'Teacher1',
@@ -146,6 +164,7 @@ const INITIAL_SESSIONS: AttendanceSession[] = [
   },
   {
     sessionId: 'SESS_002',
+    dailyCode: '581734',
     classId: 'CLASS_SE_IT_A',
     subject: 'Data Structures & Algorithms',
     teacherId: 'Teacher1',
@@ -157,6 +176,7 @@ const INITIAL_SESSIONS: AttendanceSession[] = [
   },
   {
     sessionId: 'SESS_003',
+    dailyCode: '849201',
     classId: 'CLASS_SE_IT_A',
     subject: 'Data Structures & Algorithms',
     teacherId: 'Teacher1',
@@ -180,8 +200,7 @@ const INITIAL_ATTENDANCE: AttendanceRecord[] = [
   { attendanceId: 'ATT_103_2', studentId: 'STU103', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:22:11', status: 'PRESENT' },
   { attendanceId: 'ATT_104_2', studentId: 'STU104', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:25:30', status: 'PRESENT' },
 
-  // Session 003 (Today active session)
-  { attendanceId: 'ATT_101_3', studentId: 'STU101', sessionId: 'SESS_003', classId: 'CLASS_SE_IT_A', date: TODAY_STR, time: '09:32:05', status: 'PRESENT' },
+  // Session 003 (Today active session - STU101 Aarav Patil is pending so student can mark attendance)
   { attendanceId: 'ATT_102_3', studentId: 'STU102', sessionId: 'SESS_003', classId: 'CLASS_SE_IT_A', date: TODAY_STR, time: '09:34:12', status: 'PRESENT' },
 ];
 
@@ -216,6 +235,13 @@ export class StorageService {
     }
     if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCE)) {
       this.setItem(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
+    } else {
+      // Ensure STU101 is pending for active SESS_003 so student can mark attendance
+      const records = this.getItem<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
+      const filtered = records.filter(r => !(r.sessionId === 'SESS_003' && r.studentId === 'STU101' && r.attendanceId === 'ATT_101_3'));
+      if (filtered.length !== records.length) {
+        this.setItem(STORAGE_KEYS.ATTENDANCE, filtered);
+      }
     }
   }
 
@@ -368,6 +394,30 @@ export class StorageService {
     return sessions.find(s => s.status === 'active' && (!classId || s.classId === classId));
   }
 
+  public static findSessionByCode(codeOrId: string): AttendanceSession | undefined {
+    if (!codeOrId) return undefined;
+    const clean = codeOrId.trim().replace(/[-\s]/g, '').toLowerCase();
+    const sessions = this.getSessions();
+    
+    // First look in active sessions
+    const active = sessions.filter(s => s.status === 'active');
+    
+    // 1. Match active dailyCode
+    const matchActiveCode = active.find(s => s.dailyCode && s.dailyCode.replace(/[-\s]/g, '').toLowerCase() === clean);
+    if (matchActiveCode) return matchActiveCode;
+
+    // 2. Match active sessionId
+    const matchActiveId = active.find(s => s.sessionId.toLowerCase() === clean || s.sessionId.toLowerCase().includes(clean));
+    if (matchActiveId) return matchActiveId;
+
+    // 3. Match any session dailyCode
+    const matchAnyCode = sessions.find(s => s.dailyCode && s.dailyCode.replace(/[-\s]/g, '').toLowerCase() === clean);
+    if (matchAnyCode) return matchAnyCode;
+
+    // 4. Match any session ID
+    return sessions.find(s => s.sessionId.toLowerCase() === clean);
+  }
+
   public static startSession(classId: string, subject: string, teacherId: string): AttendanceSession {
     const sessions = this.getSessions();
     
@@ -380,8 +430,11 @@ export class StorageService {
     });
 
     const now = new Date();
+    const newDailyCode = generateDailyCode(`${classId}_${now.toISOString()}`);
+
     const newSession: AttendanceSession = {
       sessionId: `SESS_${Date.now()}`,
+      dailyCode: newDailyCode,
       classId,
       subject,
       teacherId,
@@ -442,18 +495,25 @@ export class StorageService {
     return this.getAttendanceRecords().filter(r => r.studentId === studentId);
   }
 
-  public static markAttendance(sessionId: string, studentIdOrQuery: string): { success: boolean; message: string; record?: AttendanceRecord } {
-    const session = this.getSessions().find(s => s.sessionId === sessionId);
+  public static markAttendance(
+    sessionIdOrDailyCode: string,
+    studentIdOrQuery: string,
+    studentLat?: number,
+    studentLon?: number,
+    bypassGeofence: boolean = false
+  ): { success: boolean; message: string; distance?: number; record?: AttendanceRecord; session?: AttendanceSession } {
+    let session = this.getSessions().find(s => s.sessionId === sessionIdOrDailyCode);
     if (!session) {
-      return { success: false, message: 'Invalid or expired attendance session.' };
+      session = this.findSessionByCode(sessionIdOrDailyCode);
     }
-    if (session.status !== 'active') {
-      return { success: false, message: 'Attendance session is already completed or inactive.' };
+
+    if (!session || session.status !== 'active') {
+      return { success: false, message: 'Attendance Session not found or is no longer active.' };
     }
 
     const student = this.findStudent(studentIdOrQuery) || this.getUserById(studentIdOrQuery);
     if (!student) {
-      return { success: false, message: `Student '${studentIdOrQuery}' not found. Please check Roll No or QR code.` };
+      return { success: false, message: 'Student record not recognized. Please check Roll No or QR.' };
     }
 
     if (student.status === 'deactivated') {
@@ -462,25 +522,40 @@ export class StorageService {
 
     if (student.classId !== session.classId) {
       const studentClass = this.getClassById(student.classId || '');
+      const sessClass = this.getClassById(session.classId);
       return {
         success: false,
-        message: `${student.name} (Roll: ${student.rollNo}) belongs to ${studentClass?.className || 'another class'}, not this session class.`
+        message: `${student.name} is in ${studentClass?.className || 'another class'}, but this code is for ${sessClass?.className || 'a different class'}.`
       };
     }
 
+    // Geofence Validation
+    const classItem = this.getClassById(session.classId);
+    const isFenceActive = classItem ? (classItem.geofenceActive !== false) : true;
+    if (!bypassGeofence && isFenceActive && classItem && classItem.latitude !== undefined && classItem.longitude !== undefined) {
+      if (studentLat !== undefined && studentLon !== undefined) {
+        const radius = classItem.radius ?? 50; // default 50 metres
+        const distance = calculateDistanceMeters(studentLat, studentLon, classItem.latitude, classItem.longitude);
+
+        if (distance > radius) {
+          return {
+            success: false,
+            message: `Outside classroom area (${Math.round(distance)}m away, limit is ${radius}m).`,
+            distance: Math.round(distance),
+            session,
+          };
+        }
+      }
+    }
+
     const records = this.getAttendanceRecords();
-    const existing = records.find(r => r.sessionId === sessionId && r.studentId === student.userId);
+    const existing = records.find(r => r.sessionId === session.sessionId && r.studentId === student.userId);
 
     if (existing) {
-      if (existing.status === 'PRESENT') {
-        return { success: false, message: `Duplicate scan! ${student.name} (Roll: ${student.rollNo}) is already marked PRESENT.` };
-      } else {
-        // Update ABSENT to PRESENT if previously auto-marked absent
-        existing.status = 'PRESENT';
-        existing.time = new Date().toLocaleTimeString();
-        this.setItem(STORAGE_KEYS.ATTENDANCE, records);
-        return { success: true, message: `Attendance updated to PRESENT for ${student.name}`, record: existing };
-      }
+      existing.status = 'PRESENT';
+      existing.time = new Date().toLocaleTimeString();
+      this.setItem(STORAGE_KEYS.ATTENDANCE, records);
+      return { success: true, message: `✓ Attendance Verified & Recorded for ${student.name}!`, record: existing, session };
     }
 
     const now = new Date();
@@ -496,7 +571,7 @@ export class StorageService {
 
     records.push(newRecord);
     this.setItem(STORAGE_KEYS.ATTENDANCE, records);
-    return { success: true, message: `Attendance marked PRESENT for ${student.name} (Roll: ${student.rollNo})`, record: newRecord };
+    return { success: true, message: `Attendance Marked Successfully for ${student.name}!`, record: newRecord, session };
   }
 
   // Statistics calculation helpers
@@ -546,6 +621,33 @@ export class StorageService {
       records: records.sort((a, b) => b.date.localeCompare(a.date)),
     };
   }
+
+  public static updateClassGeofence(classId: string, data: { classroomName?: string; latitude: number; longitude: number; radius: number; geofenceActive?: boolean }) {
+    const classes = this.getClasses();
+    const cls = classes.find(c => c.classId === classId);
+    if (cls) {
+      cls.classroomName = data.classroomName;
+      cls.latitude = data.latitude;
+      cls.longitude = data.longitude;
+      cls.radius = data.radius;
+      if (data.geofenceActive !== undefined) {
+        cls.geofenceActive = data.geofenceActive;
+      }
+      this.setItem(STORAGE_KEYS.CLASSES, classes);
+    }
+  }
+}
+
+export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371e3; // Earth radius in meters
+  const toRad = (val: number) => (val * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
 }
 
 // Ensure storage is initialized on module load
