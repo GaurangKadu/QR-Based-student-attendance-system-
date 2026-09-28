@@ -1,4 +1,4 @@
-import { User, ClassItem, AttendanceSession, AttendanceRecord } from '../types';
+import { User, ClassItem, AttendanceSession, AttendanceRecord, TimeTableLecture, DayOfWeek } from '../types';
 
 const STORAGE_KEYS = {
   USERS: 'qr_attendance_users',
@@ -6,6 +6,7 @@ const STORAGE_KEYS = {
   SESSIONS: 'qr_attendance_sessions',
   ATTENDANCE: 'qr_attendance_records',
   CURRENT_USER: 'qr_attendance_current_user',
+  TIMETABLE: 'qr_attendance_timetable',
 };
 
 // Initial Demo Seed Data
@@ -149,59 +150,288 @@ export function generateDailyCode(seed?: string): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-const INITIAL_SESSIONS: AttendanceSession[] = [
+// Clean Initial State: No fake/sample sessions or dummy attendance logs
+const INITIAL_SESSIONS: AttendanceSession[] = [];
+const INITIAL_ATTENDANCE: AttendanceRecord[] = [];
+
+export const INITIAL_TIMETABLE: TimeTableLecture[] = [
+  // Monday (4 Lectures)
   {
-    sessionId: 'SESS_001',
-    dailyCode: '492810',
-    classId: 'CLASS_SE_IT_A',
+    id: 'TT_MON_1',
+    dayOfWeek: 'Monday',
+    startTime: '09:00 AM',
+    endTime: '10:00 AM',
     subject: 'Data Structures & Algorithms',
-    teacherId: 'Teacher1',
-    date: getPastDateStr(2),
-    startTime: '10:00 AM',
-    endTime: '11:00 AM',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 2 * 86400000).toISOString(),
+    subjectCode: 'IT401',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'blue',
   },
   {
-    sessionId: 'SESS_002',
-    dailyCode: '581734',
-    classId: 'CLASS_SE_IT_A',
-    subject: 'Data Structures & Algorithms',
-    teacherId: 'Teacher1',
-    date: getPastDateStr(1),
-    startTime: '11:15 AM',
-    endTime: '12:15 PM',
-    status: 'completed',
-    createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+    id: 'TT_MON_2',
+    dayOfWeek: 'Monday',
+    startTime: '10:15 AM',
+    endTime: '11:15 AM',
+    subject: 'Database Management Systems',
+    subjectCode: 'IT402',
+    classId: 'CLASS_SE_IT_B',
+    className: 'SE IT - Div B',
+    room: 'Room 202 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'indigo',
   },
   {
-    sessionId: 'SESS_003',
-    dailyCode: '849201',
+    id: 'TT_MON_3',
+    dayOfWeek: 'Monday',
+    startTime: '11:30 AM',
+    endTime: '01:00 PM',
+    subject: 'DSA Coding & Trees Lab',
+    subjectCode: 'IT401-P',
     classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Lab 304 (DSA Lab)',
+    lectureType: 'Practical Lab',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'emerald',
+  },
+  {
+    id: 'TT_MON_4',
+    dayOfWeek: 'Monday',
+    startTime: '02:00 PM',
+    endTime: '03:00 PM',
+    subject: 'Software Engineering',
+    subjectCode: 'IT601',
+    classId: 'CLASS_TE_IT_A',
+    className: 'TE IT - Div A',
+    room: 'Room 301 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'purple',
+  },
+
+  // Tuesday (3 Lectures)
+  {
+    id: 'TT_TUE_1',
+    dayOfWeek: 'Tuesday',
+    startTime: '09:00 AM',
+    endTime: '10:00 AM',
+    subject: 'Database Management Systems',
+    subjectCode: 'IT402',
+    classId: 'CLASS_SE_IT_B',
+    className: 'SE IT - Div B',
+    room: 'Room 202 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'indigo',
+  },
+  {
+    id: 'TT_TUE_2',
+    dayOfWeek: 'Tuesday',
+    startTime: '10:15 AM',
+    endTime: '11:15 AM',
     subject: 'Data Structures & Algorithms',
-    teacherId: 'Teacher1',
-    date: TODAY_STR,
+    subjectCode: 'IT401',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'blue',
+  },
+  {
+    id: 'TT_TUE_3',
+    dayOfWeek: 'Tuesday',
+    startTime: '01:30 PM',
+    endTime: '03:30 PM',
+    subject: 'DBMS SQL & Query Optimization Lab',
+    subjectCode: 'IT402-P',
+    classId: 'CLASS_SE_IT_B',
+    className: 'SE IT - Div B',
+    room: 'Lab 302 (DBMS Lab)',
+    lectureType: 'Practical Lab',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'emerald',
+  },
+
+  // Wednesday (4 Lectures)
+  {
+    id: 'TT_WED_1',
+    dayOfWeek: 'Wednesday',
+    startTime: '09:00 AM',
+    endTime: '10:00 AM',
+    subject: 'Software Engineering',
+    subjectCode: 'IT601',
+    classId: 'CLASS_TE_IT_A',
+    className: 'TE IT - Div A',
+    room: 'Room 301 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'purple',
+  },
+  {
+    id: 'TT_WED_2',
+    dayOfWeek: 'Wednesday',
+    startTime: '10:15 AM',
+    endTime: '11:15 AM',
+    subject: 'Data Structures & Algorithms',
+    subjectCode: 'IT401',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'blue',
+  },
+  {
+    id: 'TT_WED_3',
+    dayOfWeek: 'Wednesday',
+    startTime: '11:30 AM',
+    endTime: '12:30 PM',
+    subject: 'Graph Algorithms & Recursion Tutorial',
+    subjectCode: 'IT401-T',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Tutorial',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'amber',
+  },
+  {
+    id: 'TT_WED_4',
+    dayOfWeek: 'Wednesday',
+    startTime: '02:00 PM',
+    endTime: '03:00 PM',
+    subject: 'Database Management Systems',
+    subjectCode: 'IT402',
+    classId: 'CLASS_SE_IT_B',
+    className: 'SE IT - Div B',
+    room: 'Room 202 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'indigo',
+  },
+
+  // Thursday (3 Lectures)
+  {
+    id: 'TT_THU_1',
+    dayOfWeek: 'Thursday',
+    startTime: '09:00 AM',
+    endTime: '10:00 AM',
+    subject: 'Data Structures & Algorithms',
+    subjectCode: 'IT401',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'blue',
+  },
+  {
+    id: 'TT_THU_2',
+    dayOfWeek: 'Thursday',
+    startTime: '10:15 AM',
+    endTime: '11:15 AM',
+    subject: 'Software Engineering',
+    subjectCode: 'IT601',
+    classId: 'CLASS_TE_IT_A',
+    className: 'TE IT - Div A',
+    room: 'Room 301 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'purple',
+  },
+  {
+    id: 'TT_THU_3',
+    dayOfWeek: 'Thursday',
+    startTime: '01:30 PM',
+    endTime: '03:30 PM',
+    subject: 'Agile Sprint & SDLC Project Lab',
+    subjectCode: 'IT601-P',
+    classId: 'CLASS_TE_IT_A',
+    className: 'TE IT - Div A',
+    room: 'Lab 305 (Project Lab)',
+    lectureType: 'Practical Lab',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'emerald',
+  },
+
+  // Friday (3 Lectures)
+  {
+    id: 'TT_FRI_1',
+    dayOfWeek: 'Friday',
+    startTime: '09:00 AM',
+    endTime: '10:00 AM',
+    subject: 'Database Management Systems',
+    subjectCode: 'IT402',
+    classId: 'CLASS_SE_IT_B',
+    className: 'SE IT - Div B',
+    room: 'Room 202 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'indigo',
+  },
+  {
+    id: 'TT_FRI_2',
+    dayOfWeek: 'Friday',
+    startTime: '10:15 AM',
+    endTime: '11:15 AM',
+    subject: 'Data Structures & Algorithms',
+    subjectCode: 'IT401',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Theory',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'blue',
+  },
+  {
+    id: 'TT_FRI_3',
+    dayOfWeek: 'Friday',
+    startTime: '11:30 AM',
+    endTime: '12:30 PM',
+    subject: 'Technical Seminar & Mini-Project',
+    subjectCode: 'IT405',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Seminar Hall 1',
+    lectureType: 'Tutorial',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'amber',
+  },
+
+  // Saturday (2 Lectures)
+  {
+    id: 'TT_SAT_1',
+    dayOfWeek: 'Saturday',
     startTime: '09:30 AM',
-    status: 'active',
-    createdAt: new Date().toISOString(),
+    endTime: '11:30 AM',
+    subject: 'Competitive Programming & LeetCode Lab',
+    subjectCode: 'IT409-P',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Lab 304 (DSA Lab)',
+    lectureType: 'Practical Lab',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'cyan',
   },
-];
-
-const INITIAL_ATTENDANCE: AttendanceRecord[] = [
-  // Session 001
-  { attendanceId: 'ATT_101_1', studentId: 'STU101', sessionId: 'SESS_001', classId: 'CLASS_SE_IT_A', date: getPastDateStr(2), time: '10:02:15', status: 'PRESENT' },
-  { attendanceId: 'ATT_102_1', studentId: 'STU102', sessionId: 'SESS_001', classId: 'CLASS_SE_IT_A', date: getPastDateStr(2), time: '10:03:10', status: 'PRESENT' },
-  { attendanceId: 'ATT_103_1', studentId: 'STU103', sessionId: 'SESS_001', classId: 'CLASS_SE_IT_A', date: getPastDateStr(2), time: '10:05:40', status: 'PRESENT' },
-  { attendanceId: 'ATT_104_1', studentId: 'STU104', sessionId: 'SESS_001', classId: 'CLASS_SE_IT_A', date: getPastDateStr(2), time: '10:15:00', status: 'ABSENT' },
-
-  // Session 002
-  { attendanceId: 'ATT_101_2', studentId: 'STU101', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:18:22', status: 'PRESENT' },
-  { attendanceId: 'ATT_102_2', studentId: 'STU102', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:20:00', status: 'PRESENT' },
-  { attendanceId: 'ATT_103_2', studentId: 'STU103', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:22:11', status: 'PRESENT' },
-  { attendanceId: 'ATT_104_2', studentId: 'STU104', sessionId: 'SESS_002', classId: 'CLASS_SE_IT_A', date: getPastDateStr(1), time: '11:25:30', status: 'PRESENT' },
-
-  // Session 003 (Today active session - STU101 Aarav Patil is pending so student can mark attendance)
-  { attendanceId: 'ATT_102_3', studentId: 'STU102', sessionId: 'SESS_003', classId: 'CLASS_SE_IT_A', date: TODAY_STR, time: '09:34:12', status: 'PRESENT' },
+  {
+    id: 'TT_SAT_2',
+    dayOfWeek: 'Saturday',
+    startTime: '12:00 PM',
+    endTime: '01:00 PM',
+    subject: 'Attendance Review & Remedial Doubt Class',
+    subjectCode: 'IT-REV',
+    classId: 'CLASS_SE_IT_A',
+    className: 'SE IT - Div A',
+    room: 'Room 201 (Theory Hall)',
+    lectureType: 'Tutorial',
+    teacherName: 'Prof. Rajesh Sharma',
+    colorTag: 'rose',
+  },
 ];
 
 export class StorageService {
@@ -224,6 +454,14 @@ export class StorageService {
 
   // Initialize defaults if empty
   public static init(): void {
+    // Purge any previously cached sample sessions and attendance records
+    const PURGE_FLAG = 'qr_attendance_samples_cleared_v1';
+    if (!localStorage.getItem(PURGE_FLAG)) {
+      this.setItem(STORAGE_KEYS.SESSIONS, []);
+      this.setItem(STORAGE_KEYS.ATTENDANCE, []);
+      localStorage.setItem(PURGE_FLAG, 'true');
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     }
@@ -231,25 +469,27 @@ export class StorageService {
       this.setItem(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
     }
     if (!localStorage.getItem(STORAGE_KEYS.SESSIONS)) {
-      this.setItem(STORAGE_KEYS.SESSIONS, INITIAL_SESSIONS);
+      this.setItem(STORAGE_KEYS.SESSIONS, []);
+    }
+    if (!localStorage.getItem(STORAGE_KEYS.TIMETABLE)) {
+      this.setItem(STORAGE_KEYS.TIMETABLE, INITIAL_TIMETABLE);
     }
     if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCE)) {
-      this.setItem(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
-    } else {
-      // Ensure STU101 is pending for active SESS_003 so student can mark attendance
-      const records = this.getItem<AttendanceRecord[]>(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
-      const filtered = records.filter(r => !(r.sessionId === 'SESS_003' && r.studentId === 'STU101' && r.attendanceId === 'ATT_101_3'));
-      if (filtered.length !== records.length) {
-        this.setItem(STORAGE_KEYS.ATTENDANCE, filtered);
-      }
+      this.setItem(STORAGE_KEYS.ATTENDANCE, []);
     }
+  }
+
+  public static clearAllSamples(): void {
+    this.setItem(STORAGE_KEYS.SESSIONS, []);
+    this.setItem(STORAGE_KEYS.ATTENDANCE, []);
   }
 
   public static resetToDemo(): void {
     this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     this.setItem(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
-    this.setItem(STORAGE_KEYS.SESSIONS, INITIAL_SESSIONS);
-    this.setItem(STORAGE_KEYS.ATTENDANCE, INITIAL_ATTENDANCE);
+    this.setItem(STORAGE_KEYS.SESSIONS, []);
+    this.setItem(STORAGE_KEYS.ATTENDANCE, []);
+    this.setItem(STORAGE_KEYS.TIMETABLE, INITIAL_TIMETABLE);
   }
 
   // User Management
@@ -635,6 +875,79 @@ export class StorageService {
       }
       this.setItem(STORAGE_KEYS.CLASSES, classes);
     }
+  }
+
+  // Timetable Management
+  public static getTimeTable(): TimeTableLecture[] {
+    return this.getItem<TimeTableLecture[]>(STORAGE_KEYS.TIMETABLE, INITIAL_TIMETABLE);
+  }
+
+  public static addTimeTableLecture(lecture: Omit<TimeTableLecture, 'id'>): TimeTableLecture {
+    const list = this.getTimeTable();
+    const newLecture: TimeTableLecture = {
+      ...lecture,
+      id: `TT_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    };
+    list.push(newLecture);
+    this.setItem(STORAGE_KEYS.TIMETABLE, list);
+    return newLecture;
+  }
+
+  public static updateTimeTableLecture(lecture: TimeTableLecture): void {
+    const list = this.getTimeTable();
+    const idx = list.findIndex(l => l.id === lecture.id);
+    if (idx !== -1) {
+      list[idx] = lecture;
+      this.setItem(STORAGE_KEYS.TIMETABLE, list);
+    }
+  }
+
+  public static deleteTimeTableLecture(id: string): void {
+    const list = this.getTimeTable().filter(l => l.id !== id);
+    this.setItem(STORAGE_KEYS.TIMETABLE, list);
+  }
+
+  public static getDayName(date: Date): DayOfWeek {
+    const days: DayOfWeek[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    return days[date.getDay()];
+  }
+
+  public static getLecturesForDay(day: DayOfWeek): TimeTableLecture[] {
+    return this.getTimeTable()
+      .filter(l => l.dayOfWeek === day && !l.specificDate)
+      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }
+
+  public static getLecturesForDate(date: Date): { lectures: TimeTableLecture[]; dayOfWeek: DayOfWeek; dateStr: string } {
+    const dayOfWeek = this.getDayName(date);
+    const dateStr = date.toISOString().split('T')[0];
+    const all = this.getTimeTable();
+
+    // Matching day of week OR specific date override
+    const matching = all.filter(l => {
+      if (l.specificDate) {
+        return l.specificDate === dateStr;
+      }
+      return l.dayOfWeek === dayOfWeek;
+    });
+
+    // Helper sort function for "09:00 AM" style times
+    matching.sort((a, b) => {
+      const parseTime = (t: string) => {
+        const [timePart, period] = t.split(' ');
+        let [hours, minutes] = timePart.split(':').map(Number);
+        if (period === 'PM' && hours !== 12) hours += 12;
+        if (period === 'AM' && hours === 12) hours = 0;
+        return hours * 60 + (minutes || 0);
+      };
+      return parseTime(a.startTime) - parseTime(b.startTime);
+    });
+
+    return {
+      lectures: matching,
+      dayOfWeek,
+      dateStr,
+    };
   }
 }
 

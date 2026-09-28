@@ -20,7 +20,12 @@ import {
   Clock,
   BookOpen,
   MapPin,
-  Calendar
+  Calendar,
+  Camera,
+  Scan,
+  Check,
+  History,
+  Table
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,6 +33,7 @@ interface SidebarProps {
   onUserChange: (user: User | null) => void;
   activeTab: string;
   setActiveTab: (tab: string) => void;
+  onOpenScanner?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -35,6 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onUserChange,
   activeTab,
   setActiveTab,
+  onOpenScanner,
 }) => {
   const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -56,19 +63,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const isTeacher = currentUser.role === 'teacher';
+  const studentStats = !isTeacher ? StorageService.getStudentStats(currentUser.userId) : null;
+  const recentRecords = studentStats?.records.slice(0, 3) || [];
+  const sessions = !isTeacher ? StorageService.getSessions() : [];
 
-  const teacherNavItems = [
+  interface NavItem {
+    id: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string;
+  }
+
+  const teacherNavItems: NavItem[] = [
     { id: 'attendance', label: 'Class Management', icon: BookOpen },
-    { id: 'calendar', label: 'Class Calendar', icon: Calendar },
     { id: 'geofence', label: 'Geofence Settings', icon: MapPin },
     { id: 'reports', label: 'Reports & Analytics', icon: FileText },
   ];
 
-  const studentNavItems = [
+  const studentNavItems: NavItem[] = [
     { id: 'student_dash', label: 'My QR Attendance Pass', icon: QrCode },
   ];
 
-  const navItems = isTeacher ? teacherNavItems : studentNavItems;
+  const navItems: NavItem[] = isTeacher ? teacherNavItems : studentNavItems;
 
   const handleNavClick = (id: string) => {
     setActiveTab(id);
@@ -168,25 +184,155 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-wider px-3 mb-2">
               Navigation Menu
             </p>
-            {navItems.map(item => {
+            {navItems.map((item, idx) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
               return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavClick(item.id)}
-                  className={`w-full px-3.5 py-3 rounded-2xl text-xs font-bold flex items-center justify-between transition min-h-[44px] ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
-                    <span>{item.label}</span>
-                  </div>
-                  {isActive && <ChevronRight className="w-4 h-4 text-white/80" />}
-                </button>
+                <React.Fragment key={item.id}>
+                  <button
+                    onClick={() => handleNavClick(item.id)}
+                    className={`w-full px-3.5 py-3 rounded-2xl text-xs font-bold flex items-center justify-between transition min-h-[44px] ${
+                      isActive
+                        ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-500'}`} />
+                      <span>{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {'badge' in item && item.badge && (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+                        }`}>
+                          {item.badge}
+                        </span>
+                      )}
+                      {isActive && <ChevronRight className="w-4 h-4 text-white/80" />}
+                    </div>
+                  </button>
+
+                  {/* Clean Scanner Option Card directly below button 1 */}
+                  {(!isTeacher && idx === 0) && (
+                    <>
+                      <div className="my-2.5 p-3.5 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-md shadow-blue-500/20 border border-blue-400/20 flex flex-col gap-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="p-1.5 bg-white/20 rounded-xl">
+                              <Scan className="w-4 h-4 text-white" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black leading-none">QR Scanner</h4>
+                              <p className="text-[10px] text-blue-100 font-semibold mt-0.5">Attendance Check-In</p>
+                            </div>
+                          </div>
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (onOpenScanner) onOpenScanner();
+                            setMobileOpen(false);
+                          }}
+                          className="w-full py-2 px-3 bg-white hover:bg-blue-50 text-blue-700 font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Camera className="w-3.5 h-3.5 text-blue-600" />
+                          <span>Open Scanner</span>
+                        </button>
+                      </div>
+
+                      {/* Student Attendance History Log Card */}
+                      <div
+                        onClick={() => {
+                          handleNavClick('student_history');
+                          setMobileOpen(false);
+                        }}
+                        className={`my-2.5 p-3.5 rounded-2xl border shadow-xs flex flex-col gap-2.5 transition-all cursor-pointer group ${
+                          activeTab === 'student_history'
+                            ? 'bg-indigo-50/90 dark:bg-indigo-950/50 border-indigo-500 ring-2 ring-indigo-500/25 shadow-md shadow-indigo-500/10'
+                            : 'bg-white dark:bg-slate-800/90 border-slate-200/80 dark:border-slate-700/80 hover:border-indigo-300 dark:hover:border-indigo-600 hover:shadow-sm'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-xl transition ${
+                              activeTab === 'student_history'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 group-hover:bg-indigo-100'
+                            }`}>
+                              <History className="w-3.5 h-3.5" />
+                            </div>
+                            <div>
+                              <h4 className="text-xs font-black text-slate-900 dark:text-white leading-none">
+                                History Dashboard
+                              </h4>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+                                {studentStats?.presentCount || 0} Attended • {studentStats?.percentage || 0}%
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800">
+                            {studentStats?.records.length || 0} Logs
+                          </span>
+                        </div>
+
+                        {/* Recent History Records Preview */}
+                        <div className="space-y-1 pt-0.5">
+                          {recentRecords.length > 0 ? (
+                            recentRecords.map(rec => {
+                              const sess = sessions.find(s => s.sessionId === rec.sessionId);
+                              const subject = sess?.subject || 'Class Lecture';
+                              return (
+                                <div
+                                  key={rec.attendanceId}
+                                  className="p-1.5 px-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px]"
+                                >
+                                  <div className="min-w-0 pr-1.5">
+                                    <p className="font-bold text-slate-800 dark:text-slate-200 truncate leading-tight text-[11px]">
+                                      {subject}
+                                    </p>
+                                    <p className="text-[9px] text-slate-400 font-mono mt-0.5">
+                                      {rec.date} • {rec.time || 'Logged'}
+                                    </p>
+                                  </div>
+                                  <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/80 text-emerald-700 dark:text-emerald-300 shrink-0 flex items-center gap-0.5">
+                                    <Check className="w-2.5 h-2.5" /> Present
+                                  </span>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="py-2 text-center text-[10px] text-slate-400 dark:text-slate-500">
+                              No attendance records yet
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Open History Dashboard Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleNavClick('student_history');
+                            setMobileOpen(false);
+                          }}
+                          className={`w-full py-2 px-3 font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition cursor-pointer active:scale-98 ${
+                            activeTab === 'student_history'
+                              ? 'bg-indigo-600 text-white shadow-indigo-600/30'
+                              : 'bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/70 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800'
+                          }`}
+                        >
+                          <Table className="w-3.5 h-3.5" />
+                          <span>Open History Dashboard</span>
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </React.Fragment>
               );
             })}
           </div>

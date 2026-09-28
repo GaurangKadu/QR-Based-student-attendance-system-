@@ -55,3 +55,21 @@ export interface AttendanceStats {
   absentCount: number;
   percentage: number;
 }
+
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface TimeTableLecture {
+  id: string;
+  dayOfWeek: DayOfWeek;
+  startTime: string;      // e.g. "09:00 AM"
+  endTime: string;        // e.g. "10:00 AM"
+  subject: string;        // e.g. "Data Structures & Algorithms"
+  subjectCode: string;    // e.g. "IT401"
+  classId: string;        // e.g. "CLASS_SE_IT_A"
+  className: string;      // e.g. "SE IT - Div A"
+  room: string;           // e.g. "Room 201"
+  lectureType: 'Theory' | 'Practical Lab' | 'Tutorial';
+  teacherName?: string;   // e.g. "Prof. Rajesh Sharma"
+  colorTag?: 'blue' | 'indigo' | 'emerald' | 'amber' | 'purple' | 'cyan' | 'rose';
+  specificDate?: string;  // Optional specific date YYYY-MM-DD
+}

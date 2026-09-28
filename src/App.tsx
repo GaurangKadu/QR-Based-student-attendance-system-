@@ -5,10 +5,10 @@ import { Sidebar } from './components/Sidebar';
 import { LoginPage } from './components/LoginPage';
 import { TeacherDashboardOverview } from './components/teacher/TeacherDashboardOverview';
 import { AttendanceSessionManager } from './components/teacher/AttendanceSessionManager';
-import { CalendarView } from './components/teacher/CalendarView';
 import { ReportsView } from './components/teacher/ReportsView';
 import { GeofenceSettingsView } from './components/teacher/GeofenceSettingsView';
 import { StudentDashboard } from './components/student/StudentDashboard';
+import { StudentHistoryDashboard } from './components/student/StudentHistoryDashboard';
 import { Clock, ShieldCheck } from 'lucide-react';
 
 export default function App() {
@@ -16,6 +16,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('attendance');
   const [targetClassId, setTargetClassId] = useState<string | undefined>(undefined);
   const [now, setNow] = useState<Date>(new Date());
+  const [scannerModalOpen, setScannerModalOpen] = useState<boolean>(false);
 
   const handleNavigate = (tab: string, classId?: string) => {
     setActiveTab(tab);
@@ -58,6 +59,7 @@ export default function App() {
         onUserChange={handleUserChange}
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        onOpenScanner={() => setScannerModalOpen(true)}
       />
 
       {/* Main Content Area */}
@@ -84,12 +86,23 @@ export default function App() {
           {currentUser.role === 'teacher' ? (
             <>
               {(activeTab === 'attendance' || activeTab === 'dashboard') && <AttendanceSessionManager onNavigate={handleNavigate} />}
-              {activeTab === 'calendar' && <CalendarView />}
               {activeTab === 'geofence' && <GeofenceSettingsView />}
               {activeTab === 'reports' && <ReportsView />}
             </>
           ) : (
-            <StudentDashboard student={currentUser} />
+            activeTab === 'student_history' ? (
+              <StudentHistoryDashboard
+                student={currentUser}
+                onBackToDashboard={() => setActiveTab('student_dash')}
+              />
+            ) : (
+              <StudentDashboard
+                student={currentUser}
+                onOpenHistoryDashboard={() => setActiveTab('student_history')}
+                externalScannerOpen={scannerModalOpen}
+                onCloseExternalScanner={() => setScannerModalOpen(false)}
+              />
+            )
           )}
         </main>
 

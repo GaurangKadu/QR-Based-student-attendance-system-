@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import jsQR from 'jsqr';
+import QRCode from 'qrcode';
 import confetti from 'canvas-confetti';
 import { StorageService } from '../../services/storageService';
 import { User, AttendanceSession } from '../../types';
@@ -27,21 +28,26 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
-  ShieldCheck
+  ShieldCheck,
+  SwitchCamera,
+  Smartphone,
+  Video
 } from 'lucide-react';
 
 interface StudentQRScannerModalProps {
   student: User;
   onClose: () => void;
   onScanSuccess: () => void;
+  initialTab?: 'type_code' | 'camera' | 'upload' | 'quick_select';
 }
 
 export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
   student,
   onClose,
   onScanSuccess,
+  initialTab = 'camera',
 }) => {
-  const [activeTab, setActiveTab] = useState<'type_code' | 'camera' | 'upload' | 'quick_select'>('type_code');
+  const [activeTab, setActiveTab] = useState<'type_code' | 'camera' | 'upload' | 'quick_select'>(initialTab);
   const [manualCode, setManualCode] = useState<string>('');
   const [cameraFacingMode, setCameraFacingMode] = useState<'environment' | 'user'>('environment');
   const [cameraPermissionState, setCameraPermissionState] = useState<'loading' | 'granted' | 'denied' | 'unsupported'>('loading');
@@ -50,6 +56,11 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
   const [showHowToAllowGuide, setShowHowToAllowGuide] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [successFlash, setSuccessFlash] = useState<boolean>(false);
+  const [scannedSuccessPayload, setScannedSuccessPayload] = useState<{
+    subject: string;
+    time: string;
+    code?: string;
+  } | null>(null);
 
   const [scanResult, setScanResult] = useState<{
     type: 'success' | 'error' | 'duplicate';
@@ -59,8 +70,35 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     time?: string;
   } | null>(null);
 
-  const activeSessions = StorageService.getSessions().filter(s => s.status === 'active');
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(activeSessions[0]?.sessionId || '');
+  const rawSessions = StorageService.getSessions();
+  const activeSessions = rawSessions.filter(s => s.status === 'active');
+  const currentActiveSession = activeSessions.find(s => s.classId === student.classId) || activeSessions[0];
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(currentActiveSession?.sessionId || '');
+  const [activeSessionQrUrl, setActiveSessionQrUrl] = useState<string>('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const mobileCameraInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (currentActiveSession) {
+      const payload = JSON.stringify({
+        sessionId: currentActiveSession.sessionId,
+        dailyCode: currentActiveSession.dailyCode,
+        classId: currentActiveSession.classId,
+        date: currentActiveSession.date,
+        subject: currentActiveSession.subject
+      });
+      QRCode.toDataURL(payload, {
+        width: 320,
+        margin: 2,
+        color: { dark: '#020617', light: '#ffffff' },
+        errorCorrectionLevel: 'H',
+      }).then(url => {
+        setActiveSessionQrUrl(url);
+      }).catch(err => {
+        console.error('QR code generation error:', err);
+      });
+    }
+  }, [currentActiveSession]);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -126,22 +164,40 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
       if (res.success && res.record) {
         const sess = res.session || StorageService.findSessionByCode(targetIdentifier);
+        const subjectName = sess?.subject || 'Class Lecture';
+        const recordedTime = res.record.time;
+
+        setScannedSuccessPayload({
+          subject: subjectName,
+          time: recordedTime,
+          code: targetIdentifier,
+        });
+
         setScanResult({
           type: 'success',
           message: res.message,
-          subject: sess?.subject,
-          time: res.record.time,
+          subject: subjectName,
+          time: recordedTime,
         });
 
         playBigSuccessSound();
+        try {
+          if (navigator.vibrate) {
+            navigator.vibrate([150, 70, 150]);
+          }
+        } catch {
+          // ignore vibrate error
+        }
+
         setSuccessFlash(true);
-        setTimeout(() => setSuccessFlash(false), 900);
         triggerConfetti();
         onScanSuccessRef.current();
 
+        // Hold big success animation screen for 2.0s ("bigs for 1 2 sec if successfully scanned")
         setTimeout(() => {
+          setSuccessFlash(false);
           onCloseRef.current();
-        }, 2500);
+        }, 2100);
       } else {
         const isDuplicate = res.message.toLowerCase().includes('already') || res.message.toLowerCase().includes('duplicate');
         setScanResult({
@@ -265,25 +321,33 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setCameraPermissionState('unsupported');
-      setCameraErrorMsg('Camera API is not supported in this browser window. You can use Virtual Camera or Type Code.');
-      setUseVirtualCamera(true);
+      setCameraErrorMsg('Live video API is not supported in this browser window. You can use "Open Phone Camera" or "Type 6-Digit Passcode" below.');
       return;
     }
 
     setCameraPermissionState('loading');
     setCameraErrorMsg(null);
 
+    // Mobile-resilient constraints (avoids OverconstrainedError on Android/iOS)
     const constraintsList: MediaStreamConstraints[] = [
       {
         video: {
           facingMode: { ideal: cameraFacingMode },
-          width: { ideal: 1280, min: 640 },
-          height: { ideal: 720, min: 480 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
         },
         audio: false,
       },
       {
-        video: { facingMode: cameraFacingMode },
+        video: {
+          facingMode: { ideal: cameraFacingMode },
+        },
+        audio: false,
+      },
+      {
+        video: {
+          facingMode: cameraFacingMode,
+        },
         audio: false,
       },
       {
@@ -308,10 +372,12 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
       mediaStreamRef.current = stream;
       videoRef.current.srcObject = stream;
       videoRef.current.setAttribute('playsinline', 'true');
+      videoRef.current.setAttribute('webkit-playsinline', 'true');
+      videoRef.current.muted = true;
       try {
         await videoRef.current.play();
-      } catch {
-        // Autoplay may need user gesture
+      } catch (playErr) {
+        console.warn('Autoplay requires user gesture:', playErr);
       }
 
       setCameraPermissionState('granted');
@@ -321,11 +387,10 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     } else {
       const errString = lastError instanceof Error ? `${lastError.name}: ${lastError.message}` : String(lastError);
       setCameraPermissionState('denied');
-      setUseVirtualCamera(true); // Automatically enable interactive virtual camera preview in iframe!
       if (errString.includes('NotAllowedError') || errString.includes('PermissionDeniedError') || errString.includes('denied')) {
-        setCameraErrorMsg('Browser iframe blocked physical camera. Virtual Camera Preview has been activated below.');
+        setCameraErrorMsg('Camera access requires permission. Tap "Start Camera" below to grant permission, or tap "Open Phone Camera" to snap and scan directly.');
       } else {
-        setCameraErrorMsg('Physical camera unavailable. Virtual Camera Preview is ready below.');
+        setCameraErrorMsg('Live video stream not available. Tap "Open Phone Camera" below to snap and scan with your camera.');
       }
     }
   }, [cameraFacingMode, scanFrame, stopCameraStream]);
@@ -351,30 +416,79 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'attemptBoth',
-        });
-
-        if (code && code.data) {
-          handleVerifyCodeOrSession(code.data);
-        } else {
-          setScanResult({
-            type: 'error',
-            message: 'No readable QR code found in this photo. Please upload a clear QR or type the 6-digit code.',
-          });
-          playErrorSound();
+        // Scale down large mobile phone camera images (12MP/48MP) to 1000px max so jsQR decodes fast
+        const MAX_DIM = 1000;
+        let targetWidth = img.width;
+        let targetHeight = img.height;
+        if (targetWidth > MAX_DIM || targetHeight > MAX_DIM) {
+          if (targetWidth > targetHeight) {
+            targetHeight = Math.round((targetHeight * MAX_DIM) / targetWidth);
+            targetWidth = MAX_DIM;
+          } else {
+            targetWidth = Math.round((targetWidth * MAX_DIM) / targetHeight);
+            targetHeight = MAX_DIM;
+          }
         }
+
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+
+        // Try BarcodeDetector first if supported on mobile Chrome/Android
+        if ('BarcodeDetector' in window) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            detector.detect(img).then((barcodes: any[]) => {
+              if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+                handleVerifyCodeOrSession(barcodes[0].rawValue.trim());
+                return;
+              }
+              // fallback to jsQR
+              decodeWithJsQR(ctx, targetWidth, targetHeight);
+            }).catch(() => {
+              decodeWithJsQR(ctx, targetWidth, targetHeight);
+            });
+            return;
+          } catch {
+            // fallback to jsQR
+          }
+        }
+
+        decodeWithJsQR(ctx, targetWidth, targetHeight);
       };
       img.src = event.target?.result as string;
     };
     reader.readAsDataURL(file);
     e.target.value = '';
+  };
+
+  const decodeWithJsQR = (ctx: CanvasRenderingContext2D, width: number, height: number) => {
+    try {
+      const imageData = ctx.getImageData(0, 0, width, height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+
+      if (code && code.data && code.data.trim()) {
+        handleVerifyCodeOrSession(code.data.trim());
+      } else {
+        setScanResult({
+          type: 'error',
+          message: 'Could not detect a clear QR code in this photo. Make sure the QR code is centered and in focus, or type the 6-digit daily code.',
+        });
+        playErrorSound();
+      }
+    } catch {
+      setScanResult({
+        type: 'error',
+        message: 'Error processing photo. Please try again or type the 6-digit daily code.',
+      });
+      playErrorSound();
+    }
   };
 
   const handleManualCodeSubmit = (e: React.FormEvent) => {
@@ -616,89 +730,203 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
           {/* TAB 2: CAMERA SCANNER (WITH LIVE HARDWARE CAMERA OR VIRTUAL CAMERA PREVIEW) */}
           {activeTab === 'camera' && (
             <div className="space-y-4">
-              {/* If hardware camera is granted */}
-              {cameraPermissionState === 'granted' && !useVirtualCamera && (
+              <div className="space-y-3">
                 <div
-                  className={`relative rounded-3xl overflow-hidden bg-slate-950 border-2 min-h-[260px] flex items-center justify-center shadow-inner ${
-                    successFlash ? 'border-emerald-500 ring-8 ring-emerald-500/30' : 'border-indigo-500/50'
+                  className={`relative rounded-3xl overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 border-2 p-4 sm:p-5 min-h-[300px] flex flex-col items-center justify-between text-center shadow-2xl transition-all ${
+                    successFlash ? 'border-emerald-500 ring-8 ring-emerald-500/30' : 'border-blue-500/40'
                   }`}
                 >
-                  <video
-                    ref={videoRef}
-                    className="w-full max-h-[300px] object-cover rounded-3xl"
-                    muted
-                    playsInline
-                  />
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center">
-                    <div
-                      className={`w-52 h-52 border-2 rounded-2xl relative shadow-2xl ${
-                        successFlash ? 'border-emerald-400 bg-emerald-500/20' : 'border-blue-400/80'
-                      }`}
-                    >
-                      <div className="absolute top-0 left-0 w-5 h-5 border-t-4 border-l-4 border-blue-500"></div>
-                      <div className="absolute top-0 right-0 w-5 h-5 border-t-4 border-r-4 border-blue-500"></div>
-                      <div className="absolute bottom-0 left-0 w-5 h-5 border-b-4 border-l-4 border-blue-500"></div>
-                      <div className="absolute bottom-0 right-0 w-5 h-5 border-b-4 border-r-4 border-blue-500"></div>
+                  {/* Viewfinder Header Bar */}
+                  <div className="w-full flex items-center justify-between text-[11px] text-slate-300 font-mono">
+                    <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      {cameraPermissionState === 'granted'
+                        ? (cameraFacingMode === 'environment' ? '🟢 REAR CAMERA LIVE' : '🟢 FRONT CAMERA LIVE')
+                        : '📷 CAMERA SCANNER READY'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCameraFacingMode(prev => (prev === 'environment' ? 'user' : 'environment'));
+                          startCameraStream();
+                        }}
+                        title="Switch Camera (Front/Rear)"
+                        className="p-1 px-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-blue-300 text-[10px] flex items-center gap-1 transition"
+                      >
+                        <SwitchCamera className="w-3.5 h-3.5 text-blue-400" />
+                        <span>{cameraFacingMode === 'environment' ? 'Rear Cam' : 'Front Cam'}</span>
+                      </button>
+                      <span className="bg-slate-800/90 px-2 py-0.5 rounded-md border border-slate-700 text-blue-300 text-[10px]">
+                        HD Mobile
+                      </span>
                     </div>
-                    <p className="text-[11px] text-slate-200 font-bold mt-3 bg-slate-900/85 px-3 py-1 rounded-full border border-slate-700 shadow-md">
-                      {successFlash ? '✓ QR Code Recognized!' : 'Align Classroom Projector QR inside box'}
-                    </p>
                   </div>
-                </div>
-              )}
 
-              {/* VIRTUAL LIVE CAMERA PREVIEW (FOR IFRAMES / PREVIEW ENVIRONMENT) */}
-              {(useVirtualCamera || cameraPermissionState !== 'granted') && (
-                <div className="space-y-3">
-                  <div
-                    className={`relative rounded-3xl overflow-hidden bg-gradient-to-b from-slate-950 via-slate-900 to-indigo-950 border-2 p-5 min-h-[260px] flex flex-col items-center justify-between text-center shadow-inner ${
-                      successFlash ? 'border-emerald-500 ring-8 ring-emerald-500/30' : 'border-blue-500/40'
-                    }`}
-                  >
-                    <div className="w-full flex items-center justify-between text-[11px] text-slate-400 font-mono">
-                      <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                        LIVE CAMERA VIEWFINDER
-                      </span>
-                      <span className="bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700 text-blue-300">
-                        HD 1080p Optical
-                      </span>
-                    </div>
+                  {/* Viewfinder Target Reticle Box (CSS Selector 1) */}
+                  <div className={`my-3 relative w-60 h-60 sm:w-72 sm:h-72 border-2 rounded-3xl flex flex-col items-center justify-center p-3 bg-slate-950 shadow-2xl backdrop-blur-xs group overflow-hidden transition-all duration-300 ${
+                    successFlash
+                      ? 'border-emerald-400 ring-8 ring-emerald-500/40 shadow-[0_0_35px_#10b981]'
+                      : 'border-cyan-400/80'
+                  }`}>
+                    {/* Corner Reticle Brackets */}
+                    <div className={`absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 z-20 transition-colors ${successFlash ? 'border-emerald-400' : 'border-cyan-400'}`}></div>
+                    <div className={`absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 z-20 transition-colors ${successFlash ? 'border-emerald-400' : 'border-cyan-400'}`}></div>
+                    <div className={`absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 z-20 transition-colors ${successFlash ? 'border-emerald-400' : 'border-cyan-400'}`}></div>
+                    <div className={`absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 z-20 transition-colors ${successFlash ? 'border-emerald-400' : 'border-cyan-400'}`}></div>
 
-                    {/* Viewfinder crosshairs & simulation target */}
-                    <div className="my-3 relative w-48 h-48 border-2 border-dashed border-cyan-400/80 rounded-2xl flex flex-col items-center justify-center p-3 bg-slate-900/60 shadow-2xl backdrop-blur-xs group">
-                      <div className="absolute top-0 left-0 w-4 h-4 border-t-2 border-l-2 border-cyan-400"></div>
-                      <div className="absolute top-0 right-0 w-4 h-4 border-t-2 border-r-2 border-cyan-400"></div>
-                      <div className="absolute bottom-0 left-0 w-4 h-4 border-b-2 border-l-2 border-cyan-400"></div>
-                      <div className="absolute bottom-0 right-0 w-4 h-4 border-b-2 border-r-2 border-cyan-400"></div>
+                    {/* Active Sweeping Laser Beam */}
+                    {!successFlash && (
+                      <div className="absolute left-2 right-2 h-1 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_15px_#22d3ee] animate-pulse pointer-events-none z-20"></div>
+                    )}
 
-                      <div className="p-2.5 bg-white rounded-xl shadow-md border border-slate-200">
-                        <QrCode className="w-16 h-16 text-slate-900" />
+                    {/* Hardware Video Stream - Always in DOM without display:none so video.play() works properly */}
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="absolute inset-0 w-full h-full object-cover rounded-2xl z-0"
+                    />
+                    <canvas ref={canvasRef} className="hidden" />
+
+                    {/* Interactive Launcher if Camera is Not Currently Streaming and Not in Success Flash */}
+                    {cameraPermissionState !== 'granted' && !successFlash && (
+                      <div className="absolute inset-0 bg-slate-950/90 z-10 flex flex-col items-center justify-center p-4 text-center space-y-3 rounded-2xl">
+                        <div className="p-3 bg-blue-600/20 text-cyan-300 rounded-2xl border border-blue-400/30">
+                          <Camera className="w-8 h-8 animate-pulse text-cyan-300" />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-white">Tap to Turn On Camera</p>
+                          <p className="text-[10px] text-slate-300 mt-0.5">
+                            Uses phone rear camera or device webcam
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={startCameraStream}
+                          className="py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-blue-600/30 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Start Live Camera</span>
+                        </button>
                       </div>
+                    )}
 
-                      <span className="text-[10px] text-cyan-300 font-mono font-bold mt-2 bg-slate-950/80 px-2 py-0.5 rounded-full border border-cyan-500/30">
-                        {activeSessions[0]?.subject || 'Class Lecture QR'}
-                      </span>
-                    </div>
+                    {/* Big 1-2 Second Success Confirmation Screen ("bigs for 1 2 sec if successfully scanned") */}
+                    {successFlash && (
+                      <div className="absolute inset-0 z-30 bg-gradient-to-b from-emerald-950/95 via-slate-950/95 to-emerald-950/95 flex flex-col items-center justify-center p-4 text-center animate-in fade-in zoom-in-95 duration-200">
+                        {/* Big Pulsing Green Checkmark Ring */}
+                        <div className="relative mb-3">
+                          <div className="absolute -inset-3 bg-emerald-500/30 rounded-full blur-md animate-ping"></div>
+                          <div className="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center shadow-[0_0_35px_#10b981] animate-bounce">
+                            <Check className="w-12 h-12 stroke-[3]" />
+                          </div>
+                        </div>
 
-                    {/* Interactive 1-Click Scanner Button */}
+                        <span className="text-[10px] font-black uppercase tracking-widest text-emerald-300 bg-emerald-500/20 px-3 py-0.5 rounded-full border border-emerald-400/40 mb-1">
+                          ✓ Verified & Recorded
+                        </span>
+
+                        <h3 className="text-base sm:text-lg font-black text-white tracking-tight">
+                          ATTENDANCE MARKED!
+                        </h3>
+
+                        {scannedSuccessPayload && (
+                          <div className="mt-1.5 p-2 bg-white/10 rounded-xl border border-white/10 text-[11px] text-emerald-100 max-w-[220px]">
+                            <p className="font-bold truncate text-white">{scannedSuccessPayload.subject}</p>
+                            <p className="text-[10px] text-emerald-200 font-mono mt-0.5">{scannedSuccessPayload.time}</p>
+                          </div>
+                        )}
+
+                        <p className="text-[10px] text-emerald-300 font-mono mt-2 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          Saving attendance log...
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Actions & Controls */}
+                  <div className="w-full space-y-2.5">
+                    {/* Primary Button 1: Native Mobile Camera Shutter (100% reliable on Android & iPhone) */}
                     <button
                       type="button"
-                      onClick={() => handleVirtualScan(activeSessions[0])}
-                      className="w-full py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 hover:from-blue-500 hover:to-indigo-600 text-white font-black text-xs rounded-2xl shadow-xl shadow-blue-500/30 flex items-center justify-center gap-2 cursor-pointer transition active:scale-98"
+                      disabled={isProcessing}
+                      onClick={() => mobileCameraInputRef.current?.click()}
+                      className="w-full py-3.5 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 hover:from-emerald-500 hover:to-teal-600 active:scale-98 text-white font-black text-xs sm:text-sm rounded-2xl shadow-xl shadow-emerald-600/30 flex items-center justify-center gap-2 cursor-pointer transition disabled:opacity-50"
                     >
-                      <Eye className="w-4 h-4 text-cyan-300" />
-                      <span>Scan & Verify Classroom QR Pass</span>
+                      <Smartphone className="w-4 h-4 text-emerald-200" />
+                      <span>📱 Open Mobile Camera (Snap & Scan)</span>
                     </button>
-                  </div>
 
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 text-center font-medium">
-                    ⚡ In preview mode, click <strong>"Scan & Verify Classroom QR Pass"</strong> to instantly decode and mark attendance.
-                  </p>
+                    {/* Secondary Tool Bar */}
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={startCameraStream}
+                        className="py-2.5 px-3 bg-white/10 hover:bg-white/15 text-white font-bold rounded-xl border border-white/10 flex items-center justify-center gap-1.5 transition text-[11px] cursor-pointer"
+                      >
+                        <Video className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>{cameraPermissionState === 'granted' ? 'Restart Live Feed' : 'Turn On Live Feed'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="py-2.5 px-3 bg-white/10 hover:bg-white/15 text-white font-bold rounded-xl border border-white/10 flex items-center justify-center gap-1.5 transition text-[11px] cursor-pointer"
+                      >
+                        <Upload className="w-3.5 h-3.5 text-blue-400" />
+                        <span>Upload Photo / File</span>
+                      </button>
+                    </div>
+
+                    {/* Instant Check-In Attendance Pass */}
+                    {currentActiveSession && (
+                      <button
+                        type="button"
+                        disabled={isProcessing}
+                        onClick={() => handleVirtualScan(currentActiveSession)}
+                        className="w-full py-2.5 bg-slate-800/80 hover:bg-slate-700/80 text-blue-300 hover:text-white font-bold text-xs rounded-xl border border-slate-700 flex items-center justify-center gap-1.5 cursor-pointer transition active:scale-98"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-blue-400" />
+                        <span>⚡ Instant 1-Tap Attendance Check-In</span>
+                      </button>
+                    )}
+
+                    <input
+                      ref={mobileCameraInputRef}
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleImageFileUpload}
+                      className="hidden"
+                    />
+
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileUpload}
+                      className="hidden"
+                    />
+                  </div>
                 </div>
-              )}
+
+                {currentActiveSession && (
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-300 font-semibold truncate">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span className="truncate">
+                        Classroom: <strong>{currentActiveSession.subject}</strong>
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono font-black text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/60 px-2 py-0.5 rounded-lg border border-blue-200 dark:border-blue-800 shrink-0">
+                      Code: {currentActiveSession.dailyCode}
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Troubleshooting Accordion for Unblocking Camera */}
               <div className="bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden text-xs">
@@ -715,9 +943,9 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
                 {showHowToAllowGuide && (
                   <div className="p-3.5 pt-0 border-t border-slate-200 dark:border-slate-700 space-y-2 text-slate-600 dark:text-slate-400">
-                    <p><strong>• Google Chrome / Edge:</strong> Click the padlock 🔒 icon on the left of the address bar ➔ Set <strong>Camera</strong> to <em>Allow</em> ➔ Refresh.</p>
-                    <p><strong>• Safari (iOS / Mac):</strong> Tap <em>aA</em> in address bar ➔ <em>Website Settings</em> ➔ Allow <em>Camera</em>.</p>
-                    <p><strong>• Android Chrome:</strong> Tap the lock icon ➔ Permissions ➔ Camera ➔ Allow.</p>
+                    <p><strong>• Mobile (Android / Chrome):</strong> Tap the lock icon 🔒 next to the web address ➔ Permissions ➔ Camera ➔ Allow.</p>
+                    <p><strong>• Mobile (iPhone / Safari):</strong> Tap <em>aA</em> in address bar ➔ <em>Website Settings</em> ➔ Camera ➔ Allow.</p>
+                    <p><strong>• Laptop / Desktop:</strong> Click the camera icon or padlock 🔒 on the left of your browser address bar ➔ Allow Camera ➔ Refresh.</p>
                   </div>
                 )}
               </div>
