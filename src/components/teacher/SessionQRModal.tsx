@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
 import { AttendanceSession, ClassItem } from '../../types';
 import { StorageService } from '../../services/storageService';
-import { QrCode, X, MapPin, Users, Copy, Check, Hash, Sparkles } from 'lucide-react';
+import { X, Download } from 'lucide-react';
 
 interface SessionQRModalProps {
   session: AttendanceSession;
@@ -11,22 +11,26 @@ interface SessionQRModalProps {
 
 export const SessionQRModal: React.FC<SessionQRModalProps> = ({ session, onClose }) => {
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
-  const [copied, setCopied] = useState<boolean>(false);
   const classItem: ClassItem | undefined = StorageService.getClassById(session.classId);
-  const sessionRecords = StorageService.getAttendanceForSession(session.sessionId);
-  const presentCount = sessionRecords.filter(r => r.status === 'PRESENT').length;
-
-  const dailyCode = session.dailyCode || '849201';
-  // Formatted as 3-3 e.g., "849 201"
-  const formattedCode = dailyCode.length === 6 
-    ? `${dailyCode.slice(0, 3)} ${dailyCode.slice(3)}`
-    : dailyCode;
+  
+  const [presentCount, setPresentCount] = useState<number>(() => {
+    return StorageService.getAttendanceForSession(session.sessionId).filter(r => r.status === 'PRESENT').length;
+  });
 
   useEffect(() => {
-    // Generate QR payload containing JSON and fallback ID
+    const handleUpdate = () => {
+      const records = StorageService.getAttendanceForSession(session.sessionId);
+      setPresentCount(records.filter(r => r.status === 'PRESENT').length);
+    };
+
+    window.addEventListener('qr_attendance_updated', handleUpdate);
+    return () => window.removeEventListener('qr_attendance_updated', handleUpdate);
+  }, [session.sessionId]);
+
+  useEffect(() => {
     const payload = JSON.stringify({
       sessionId: session.sessionId,
-      dailyCode: dailyCode,
+      dailyCode: session.dailyCode,
       classId: session.classId,
       date: session.date,
       subject: session.subject
@@ -35,17 +39,21 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({ session, onClose
     QRCode.toDataURL(payload, {
       width: 280,
       margin: 2,
-      color: { dark: '#090d16', light: '#ffffff' },
+      color: { dark: '#0f172a', light: '#ffffff' },
       errorCorrectionLevel: 'H',
     })
       .then(url => setQrDataUrl(url))
       .catch(err => console.error(err));
-  }, [session, dailyCode]);
+  }, [session]);
 
-  const handleCopyCode = () => {
-    navigator.clipboard?.writeText(dailyCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+  const handleDownloadQR = () => {
+    if (!qrDataUrl) return;
+    const a = document.createElement('a');
+    a.href = qrDataUrl;
+    const sanitizedClass = (classItem?.className || session.classId).replace(/[^a-zA-Z0-9]/g, '-');
+    const sanitizedSubject = session.subject.replace(/[^a-zA-Z0-9]/g, '-');
+    a.download = `attendance-${sanitizedClass}-${sanitizedSubject}-${session.date}.png`;
+    a.click();
   };
 
   const handleEndSession = () => {
@@ -54,139 +62,97 @@ export const SessionQRModal: React.FC<SessionQRModalProps> = ({ session, onClose
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full p-5 sm:p-6 border border-slate-200 dark:border-slate-800 text-center relative transition-colors max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 mb-4 shrink-0">
-          <div className="flex items-center gap-2 text-left">
-            <div className="p-2.5 bg-emerald-600 text-white rounded-2xl shadow-inner">
-              <QrCode className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="font-extrabold text-slate-900 dark:text-white text-base">Active Classroom QR Code</h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {classItem?.className} • <span className="text-blue-600 dark:text-blue-400 font-bold">{session.subject}</span>
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-md w-full p-6 text-center relative">
+        {/* Close Button */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        {/* Status & Title */}
+        <div className="mb-4">
+          <span className="inline-block px-2.5 py-0.5 bg-emerald-100 text-emerald-800 text-[11px] font-semibold rounded-full uppercase tracking-wider mb-2">
+            Attendance Active
+          </span>
+          <h2 className="text-lg font-bold text-slate-900">
+            {classItem?.className || 'Classroom'}
+          </h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Subject: <span className="font-semibold text-slate-800">{session.subject}</span>
+          </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1">
-          {/* DAILY ATTENDANCE CODE BANNER */}
-          <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white p-4 rounded-2xl shadow-lg relative overflow-hidden">
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-black uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full flex items-center gap-1">
-                <Sparkles className="w-3 h-3 text-amber-300" /> Today's Daily QR Passcode
-              </span>
-              <span className="text-[10px] font-semibold text-blue-100">Unique for {session.date}</span>
+        {/* Main QR Display */}
+        <div className="my-5 p-4 bg-white border border-slate-200 rounded-lg inline-block mx-auto">
+          {qrDataUrl ? (
+            <img
+              src={qrDataUrl}
+              alt="Attendance QR Code"
+              width={260}
+              height={260}
+              className="mx-auto"
+            />
+          ) : (
+            <div className="w-[260px] h-[260px] bg-slate-100 animate-pulse rounded flex items-center justify-center text-xs text-slate-400">
+              Generating QR Code...
             </div>
-
-            <div className="flex items-center justify-between gap-3 bg-slate-950/40 p-3 rounded-xl border border-white/20 mt-2">
-              <div className="text-left">
-                <p className="text-[10px] text-blue-200 uppercase font-bold tracking-wider flex items-center gap-1">
-                  <Hash className="w-3 h-3" /> 6-Digit Type-In Code:
-                </p>
-                <p className="text-2xl sm:text-3xl font-mono font-black tracking-widest text-white mt-0.5 drop-shadow-sm">
-                  {formattedCode}
-                </p>
-              </div>
-
-              <button
-                onClick={handleCopyCode}
-                className="px-3.5 py-2 bg-white text-blue-900 hover:bg-blue-50 rounded-xl text-xs font-black shadow-md flex items-center gap-1.5 transition cursor-pointer shrink-0"
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-4 h-4 text-emerald-600" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4 text-blue-600" />
-                    <span>Copy Code</span>
-                  </>
-                )}
-              </button>
-            </div>
-            <p className="text-[11px] text-blue-100 mt-2 text-left">
-              💡 Students unable to scan camera QR can directly type this <strong>{dailyCode}</strong> on their portal to mark attendance.
+          )}
+          <p className="text-xs text-slate-500 font-medium mt-3">
+            Scan this QR to mark attendance
+          </p>
+          {session.dailyCode && (
+            <p className="text-xs font-mono font-semibold text-slate-700 mt-1">
+              Passcode: {session.dailyCode}
             </p>
+          )}
+
+          <div className="mt-3 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={handleDownloadQR}
+              disabled={!qrDataUrl}
+              className="w-full py-1.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-xs rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <Download className="w-3.5 h-3.5 text-blue-600" />
+              <span>DOWNLOAD QR</span>
+            </button>
           </div>
-
-          {/* QR Code Render Card */}
-          <div className="p-4 bg-white rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-700 shadow-inner inline-block mx-auto">
-            {qrDataUrl ? (
-              <img
-                src={qrDataUrl}
-                alt="Session QR Code"
-                width={240}
-                height={240}
-                className="mx-auto rounded-xl"
-              />
-            ) : (
-              <div className="w-[240px] h-[240px] bg-slate-100 animate-pulse rounded-xl flex items-center justify-center text-slate-400">
-                Generating Session QR...
-              </div>
-            )}
-            <p className="text-[11px] text-slate-500 font-bold mt-2 font-mono">
-              Scan with Student Camera Scanner
-            </p>
-          </div>
-
-          {/* Live Present Counter & Geofence Badge */}
-          <div className="grid grid-cols-2 gap-2 text-left">
-            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
-              <Users className="w-5 h-5 text-emerald-600 shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Marked Present</p>
-                <p className="text-lg font-black text-emerald-600 dark:text-emerald-400">{presentCount} Students</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-50 dark:bg-slate-800/80 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center gap-2.5">
-              <MapPin className="w-5 h-5 text-blue-600 shrink-0" />
-              <div>
-                <p className="text-[10px] font-bold text-slate-400 uppercase">Geofence Radius</p>
-                <p className="text-xs font-extrabold text-slate-800 dark:text-slate-200">{classItem?.radius || 50}m Radius</p>
-              </div>
-            </div>
-          </div>
-
-          {/* WhatsApp Share Button */}
-          <button
-            onClick={() => {
-              const msg = `📢 *Attendance Passcode for ${classItem?.className || 'Class'} (${session.subject})*\n\n👉 *Daily Passcode*: *${dailyCode}*\n👉 *Session ID*: ${session.sessionId}\n\nPlease open your Student Portal, scan the QR or type this 6-digit code to check in.`;
-              const text = encodeURIComponent(msg);
-              window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
-            }}
-            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-2xl text-xs shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-          >
-            <span>💬 Share Passcode on WhatsApp Group</span>
-          </button>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-3 pt-3 border-t border-slate-100 dark:border-slate-800 shrink-0">
+        {/* Session Info */}
+        <div className="py-3 border-t border-b border-slate-100 my-4 flex items-center justify-around text-xs font-medium text-slate-700">
+          <div>
+            Session Status: <span className="text-emerald-600 font-semibold">Active</span>
+          </div>
+          <div className="border-r border-slate-200 h-4"></div>
+          <div>
+            Students Present: <span className="text-blue-600 font-bold">{presentCount}</span>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex items-center gap-3">
           <button
+            type="button"
             onClick={onClose}
-            className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold rounded-2xl text-xs transition cursor-pointer"
+            className="flex-1 py-2 px-4 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium text-xs rounded-lg transition cursor-pointer"
           >
-            Hide QR Code
+            Keep Active
           </button>
           <button
+            type="button"
             onClick={handleEndSession}
-            className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white font-extrabold rounded-2xl text-xs shadow-md transition cursor-pointer"
+            className="flex-1 py-2 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
           >
-            End Attendance Session
+            END ATTENDANCE
           </button>
         </div>
       </div>
     </div>
   );
 };
+

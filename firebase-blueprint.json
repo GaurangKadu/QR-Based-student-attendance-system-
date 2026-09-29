@@ -1,0 +1,92 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile for teachers and students",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["teacher", "student"] },
+        "rollNo": { "type": "string" },
+        "classId": { "type": "string" },
+        "qrId": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "deactivated"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "role", "status"]
+    },
+    "ClassItem": {
+      "title": "ClassItem",
+      "description": "Class division and classroom geofence settings",
+      "type": "object",
+      "properties": {
+        "classId": { "type": "string" },
+        "className": { "type": "string" },
+        "year": { "type": "string" },
+        "semester": { "type": "string" },
+        "division": { "type": "string" },
+        "subject": { "type": "string" },
+        "totalStudents": { "type": "number" },
+        "classroomName": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" },
+        "radius": { "type": "number" },
+        "geofenceActive": { "type": "boolean" }
+      },
+      "required": ["classId", "className", "subject"]
+    },
+    "AttendanceSession": {
+      "title": "AttendanceSession",
+      "description": "Shared attendance session created by teacher",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "dailyCode": { "type": "string" },
+        "classId": { "type": "string" },
+        "subject": { "type": "string" },
+        "teacherId": { "type": "string" },
+        "date": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed", "cancelled"] },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["sessionId", "classId", "subject", "teacherId", "status"]
+    },
+    "AttendanceRecord": {
+      "title": "AttendanceRecord",
+      "description": "Shared attendance record for a student session",
+      "type": "object",
+      "properties": {
+        "attendanceId": { "type": "string" },
+        "studentId": { "type": "string" },
+        "sessionId": { "type": "string" },
+        "classId": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "status": { "type": "string", "enum": ["PRESENT", "ABSENT"] }
+      },
+      "required": ["attendanceId", "studentId", "sessionId", "classId", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles collection"
+    },
+    "/classes/{classId}": {
+      "schema": "ClassItem",
+      "description": "Class divisions and geofences collection"
+    },
+    "/attendanceSessions/{sessionId}": {
+      "schema": "AttendanceSession",
+      "description": "Shared attendance sessions collection"
+    },
+    "/attendance/{attendanceId}": {
+      "schema": "AttendanceRecord",
+      "description": "Shared student attendance records collection"
+    }
+  }
+}

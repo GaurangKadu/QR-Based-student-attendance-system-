@@ -1,4 +1,16 @@
 import { User, ClassItem, AttendanceSession, AttendanceRecord, TimeTableLecture, DayOfWeek } from '../types';
+import { db } from '../lib/firebase';
+import {
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  updateDoc,
+  query,
+  where
+} from 'firebase/firestore';
 
 const STORAGE_KEYS = {
   USERS: 'qr_attendance_users',
@@ -19,6 +31,10 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'A',
     subject: 'Data Structures & Algorithms',
     totalStudents: 60,
+    classroomName: 'Room 201 (Theory Hall)',
+    latitude: 19.0760,
+    longitude: 72.8777,
+    radius: 50,
     geofenceActive: true,
   },
   {
@@ -29,6 +45,10 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'B',
     subject: 'Database Management Systems',
     totalStudents: 60,
+    classroomName: 'Room 202 (Theory Hall)',
+    latitude: 19.0760,
+    longitude: 72.8777,
+    radius: 50,
     geofenceActive: true,
   },
   {
@@ -39,6 +59,10 @@ const INITIAL_CLASSES: ClassItem[] = [
     division: 'A',
     subject: 'Software Engineering',
     totalStudents: 55,
+    classroomName: 'Room 301 (Theory Hall)',
+    latitude: 19.0760,
+    longitude: 72.8777,
+    radius: 50,
     geofenceActive: true,
   },
 ];
@@ -127,17 +151,9 @@ const INITIAL_USERS: User[] = [
   },
 ];
 
-// Helper to get formatted date
-const getPastDateStr = (daysAgo: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() - daysAgo);
-  return d.toISOString().split('T')[0];
-};
-
 const TODAY_STR = new Date().toISOString().split('T')[0];
 
 export function generateDailyCode(seed?: string): string {
-  // Generate a clean 6-digit numeric code
   if (seed) {
     let hash = 0;
     for (let i = 0; i < seed.length; i++) {
@@ -150,12 +166,10 @@ export function generateDailyCode(seed?: string): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Clean Initial State: No fake/sample sessions or dummy attendance logs
 const INITIAL_SESSIONS: AttendanceSession[] = [];
 const INITIAL_ATTENDANCE: AttendanceRecord[] = [];
 
 export const INITIAL_TIMETABLE: TimeTableLecture[] = [
-  // Monday (4 Lectures)
   {
     id: 'TT_MON_1',
     dayOfWeek: 'Monday',
@@ -184,254 +198,6 @@ export const INITIAL_TIMETABLE: TimeTableLecture[] = [
     teacherName: 'Prof. Rajesh Sharma',
     colorTag: 'indigo',
   },
-  {
-    id: 'TT_MON_3',
-    dayOfWeek: 'Monday',
-    startTime: '11:30 AM',
-    endTime: '01:00 PM',
-    subject: 'DSA Coding & Trees Lab',
-    subjectCode: 'IT401-P',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Lab 304 (DSA Lab)',
-    lectureType: 'Practical Lab',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'emerald',
-  },
-  {
-    id: 'TT_MON_4',
-    dayOfWeek: 'Monday',
-    startTime: '02:00 PM',
-    endTime: '03:00 PM',
-    subject: 'Software Engineering',
-    subjectCode: 'IT601',
-    classId: 'CLASS_TE_IT_A',
-    className: 'TE IT - Div A',
-    room: 'Room 301 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'purple',
-  },
-
-  // Tuesday (3 Lectures)
-  {
-    id: 'TT_TUE_1',
-    dayOfWeek: 'Tuesday',
-    startTime: '09:00 AM',
-    endTime: '10:00 AM',
-    subject: 'Database Management Systems',
-    subjectCode: 'IT402',
-    classId: 'CLASS_SE_IT_B',
-    className: 'SE IT - Div B',
-    room: 'Room 202 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'indigo',
-  },
-  {
-    id: 'TT_TUE_2',
-    dayOfWeek: 'Tuesday',
-    startTime: '10:15 AM',
-    endTime: '11:15 AM',
-    subject: 'Data Structures & Algorithms',
-    subjectCode: 'IT401',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'blue',
-  },
-  {
-    id: 'TT_TUE_3',
-    dayOfWeek: 'Tuesday',
-    startTime: '01:30 PM',
-    endTime: '03:30 PM',
-    subject: 'DBMS SQL & Query Optimization Lab',
-    subjectCode: 'IT402-P',
-    classId: 'CLASS_SE_IT_B',
-    className: 'SE IT - Div B',
-    room: 'Lab 302 (DBMS Lab)',
-    lectureType: 'Practical Lab',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'emerald',
-  },
-
-  // Wednesday (4 Lectures)
-  {
-    id: 'TT_WED_1',
-    dayOfWeek: 'Wednesday',
-    startTime: '09:00 AM',
-    endTime: '10:00 AM',
-    subject: 'Software Engineering',
-    subjectCode: 'IT601',
-    classId: 'CLASS_TE_IT_A',
-    className: 'TE IT - Div A',
-    room: 'Room 301 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'purple',
-  },
-  {
-    id: 'TT_WED_2',
-    dayOfWeek: 'Wednesday',
-    startTime: '10:15 AM',
-    endTime: '11:15 AM',
-    subject: 'Data Structures & Algorithms',
-    subjectCode: 'IT401',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'blue',
-  },
-  {
-    id: 'TT_WED_3',
-    dayOfWeek: 'Wednesday',
-    startTime: '11:30 AM',
-    endTime: '12:30 PM',
-    subject: 'Graph Algorithms & Recursion Tutorial',
-    subjectCode: 'IT401-T',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Tutorial',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'amber',
-  },
-  {
-    id: 'TT_WED_4',
-    dayOfWeek: 'Wednesday',
-    startTime: '02:00 PM',
-    endTime: '03:00 PM',
-    subject: 'Database Management Systems',
-    subjectCode: 'IT402',
-    classId: 'CLASS_SE_IT_B',
-    className: 'SE IT - Div B',
-    room: 'Room 202 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'indigo',
-  },
-
-  // Thursday (3 Lectures)
-  {
-    id: 'TT_THU_1',
-    dayOfWeek: 'Thursday',
-    startTime: '09:00 AM',
-    endTime: '10:00 AM',
-    subject: 'Data Structures & Algorithms',
-    subjectCode: 'IT401',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'blue',
-  },
-  {
-    id: 'TT_THU_2',
-    dayOfWeek: 'Thursday',
-    startTime: '10:15 AM',
-    endTime: '11:15 AM',
-    subject: 'Software Engineering',
-    subjectCode: 'IT601',
-    classId: 'CLASS_TE_IT_A',
-    className: 'TE IT - Div A',
-    room: 'Room 301 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'purple',
-  },
-  {
-    id: 'TT_THU_3',
-    dayOfWeek: 'Thursday',
-    startTime: '01:30 PM',
-    endTime: '03:30 PM',
-    subject: 'Agile Sprint & SDLC Project Lab',
-    subjectCode: 'IT601-P',
-    classId: 'CLASS_TE_IT_A',
-    className: 'TE IT - Div A',
-    room: 'Lab 305 (Project Lab)',
-    lectureType: 'Practical Lab',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'emerald',
-  },
-
-  // Friday (3 Lectures)
-  {
-    id: 'TT_FRI_1',
-    dayOfWeek: 'Friday',
-    startTime: '09:00 AM',
-    endTime: '10:00 AM',
-    subject: 'Database Management Systems',
-    subjectCode: 'IT402',
-    classId: 'CLASS_SE_IT_B',
-    className: 'SE IT - Div B',
-    room: 'Room 202 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'indigo',
-  },
-  {
-    id: 'TT_FRI_2',
-    dayOfWeek: 'Friday',
-    startTime: '10:15 AM',
-    endTime: '11:15 AM',
-    subject: 'Data Structures & Algorithms',
-    subjectCode: 'IT401',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Theory',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'blue',
-  },
-  {
-    id: 'TT_FRI_3',
-    dayOfWeek: 'Friday',
-    startTime: '11:30 AM',
-    endTime: '12:30 PM',
-    subject: 'Technical Seminar & Mini-Project',
-    subjectCode: 'IT405',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Seminar Hall 1',
-    lectureType: 'Tutorial',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'amber',
-  },
-
-  // Saturday (2 Lectures)
-  {
-    id: 'TT_SAT_1',
-    dayOfWeek: 'Saturday',
-    startTime: '09:30 AM',
-    endTime: '11:30 AM',
-    subject: 'Competitive Programming & LeetCode Lab',
-    subjectCode: 'IT409-P',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Lab 304 (DSA Lab)',
-    lectureType: 'Practical Lab',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'cyan',
-  },
-  {
-    id: 'TT_SAT_2',
-    dayOfWeek: 'Saturday',
-    startTime: '12:00 PM',
-    endTime: '01:00 PM',
-    subject: 'Attendance Review & Remedial Doubt Class',
-    subjectCode: 'IT-REV',
-    classId: 'CLASS_SE_IT_A',
-    className: 'SE IT - Div A',
-    room: 'Room 201 (Theory Hall)',
-    lectureType: 'Tutorial',
-    teacherName: 'Prof. Rajesh Sharma',
-    colorTag: 'rose',
-  },
 ];
 
 export class StorageService {
@@ -452,16 +218,8 @@ export class StorageService {
     }
   }
 
-  // Initialize defaults if empty
+  // Initialize and attach Firestore real-time listeners for shared attendance state across devices
   public static init(): void {
-    // Purge any previously cached sample sessions and attendance records
-    const PURGE_FLAG = 'qr_attendance_samples_cleared_v1';
-    if (!localStorage.getItem(PURGE_FLAG)) {
-      this.setItem(STORAGE_KEYS.SESSIONS, []);
-      this.setItem(STORAGE_KEYS.ATTENDANCE, []);
-      localStorage.setItem(PURGE_FLAG, 'true');
-    }
-
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
       this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     }
@@ -477,6 +235,81 @@ export class StorageService {
     if (!localStorage.getItem(STORAGE_KEYS.ATTENDANCE)) {
       this.setItem(STORAGE_KEYS.ATTENDANCE, []);
     }
+
+    // Attach Firestore listeners to synchronize shared data
+    this.setupFirestoreListeners();
+  }
+
+  private static setupFirestoreListeners(): void {
+    try {
+      // 1. Sync Attendance Sessions from Firestore
+      onSnapshot(collection(db, 'attendanceSessions'), (snapshot) => {
+        const sessions: AttendanceSession[] = [];
+        snapshot.forEach((docSnap) => {
+          sessions.push(docSnap.data() as AttendanceSession);
+        });
+        if (sessions.length > 0) {
+          this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+        }
+        window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+      }, (err) => {
+        console.warn('Firestore attendanceSessions snapshot error:', err);
+      });
+
+      // 2. Sync Attendance Records from Firestore
+      onSnapshot(collection(db, 'attendance'), (snapshot) => {
+        const records: AttendanceRecord[] = [];
+        snapshot.forEach((docSnap) => {
+          records.push(docSnap.data() as AttendanceRecord);
+        });
+        this.setItem(STORAGE_KEYS.ATTENDANCE, records);
+        window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+      }, (err) => {
+        console.warn('Firestore attendance snapshot error:', err);
+      });
+
+      // 3. Sync Classes & Geofence Settings from Firestore
+      onSnapshot(collection(db, 'classes'), (snapshot) => {
+        const classes: ClassItem[] = [];
+        snapshot.forEach((docSnap) => {
+          classes.push(docSnap.data() as ClassItem);
+        });
+        if (classes.length > 0) {
+          this.setItem(STORAGE_KEYS.CLASSES, classes);
+        }
+        window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+      }, (err) => {
+        console.warn('Firestore classes snapshot error:', err);
+      });
+
+      // Seed initial users and classes into Firestore if not present
+      this.seedInitialFirestoreData();
+    } catch (err) {
+      console.warn('Error setting up Firestore listeners:', err);
+    }
+  }
+
+
+  private static async seedInitialFirestoreData(): Promise<void> {
+    try {
+      // Seed users
+      const usersSnap = await getDocs(collection(db, 'users'));
+      if (usersSnap.empty) {
+        for (const user of INITIAL_USERS) {
+          await setDoc(doc(db, 'users', user.userId), user, { merge: true });
+        }
+      }
+
+      // Seed classes
+      const classesSnap = await getDocs(collection(db, 'classes'));
+      if (classesSnap.empty) {
+        for (const cls of INITIAL_CLASSES) {
+          await setDoc(doc(db, 'classes', cls.classId), cls, { merge: true });
+        }
+      }
+    } catch (err) {
+      console.warn('Seed Firestore error:', err);
+    }
   }
 
   public static clearAllSamples(): void {
@@ -490,6 +323,7 @@ export class StorageService {
     this.setItem(STORAGE_KEYS.SESSIONS, []);
     this.setItem(STORAGE_KEYS.ATTENDANCE, []);
     this.setItem(STORAGE_KEYS.TIMETABLE, INITIAL_TIMETABLE);
+    this.seedInitialFirestoreData();
   }
 
   // User Management
@@ -509,11 +343,10 @@ export class StorageService {
     return this.getUsers().find(u => u.qrId === qrId || u.userId === qrId);
   }
 
-  public static findStudent(query: string): User | undefined {
-    if (!query) return undefined;
-    const raw = query.trim();
+  public static findStudent(queryStr: string): User | undefined {
+    if (!queryStr) return undefined;
+    const raw = queryStr.trim();
 
-    // Check if JSON QR payload
     if (raw.startsWith('{') && raw.endsWith('}')) {
       try {
         const parsed = JSON.parse(raw);
@@ -521,43 +354,27 @@ export class StorageService {
           const u = this.getUserById(parsed.userId);
           if (u) return u;
         }
-        if (parsed.qrId) {
-          const u = this.getUserByQRId(parsed.qrId);
-          if (u) return u;
-        }
-        if (parsed.rollNo) {
-          const u = this.getStudents().find(s => s.rollNo === parsed.rollNo || s.rollNo === String(parsed.rollNo));
-          if (u) return u;
-        }
       } catch {
-        // ignore parse error
+        // ignore
       }
     }
 
-    const clean = raw.toLowerCase().replace(/^[#\s]+/, '').trim();
+    const clean = raw.toLowerCase();
     const students = this.getStudents();
 
-    // 1. Exact userId match
     const byId = students.find(s => s.userId.toLowerCase() === clean);
     if (byId) return byId;
 
-    // 2. Exact qrId match
     const byQr = students.find(s => s.qrId && s.qrId.toLowerCase() === clean);
     if (byQr) return byQr;
 
-    // 3. Exact rollNo match
     const byRoll = students.find(s => s.rollNo && s.rollNo.toLowerCase() === clean);
     if (byRoll) return byRoll;
 
-    // 4. Exact email match
     const byEmail = students.find(s => s.email.toLowerCase() === clean);
     if (byEmail) return byEmail;
 
-    // 5. Name contains or exact
-    const byName = students.find(s => s.name.toLowerCase() === clean || s.name.toLowerCase().includes(clean));
-    if (byName) return byName;
-
-    return undefined;
+    return students.find(s => s.name.toLowerCase() === clean || s.name.toLowerCase().includes(clean));
   }
 
   public static addUser(user: Omit<User, 'createdAt'>): User {
@@ -568,6 +385,12 @@ export class StorageService {
     };
     users.push(newUser);
     this.setItem(STORAGE_KEYS.USERS, users);
+
+    // Write to Firestore
+    setDoc(doc(db, 'users', newUser.userId), newUser, { merge: true }).catch(err => {
+      console.warn('Firestore addUser error:', err);
+    });
+
     return newUser;
   }
 
@@ -578,6 +401,12 @@ export class StorageService {
 
     users[index] = { ...users[index], ...updates };
     this.setItem(STORAGE_KEYS.USERS, users);
+
+    // Update in Firestore
+    setDoc(doc(db, 'users', userId), users[index], { merge: true }).catch(err => {
+      console.warn('Firestore updateUser error:', err);
+    });
+
     return users[index];
   }
 
@@ -590,16 +419,9 @@ export class StorageService {
 
   public static deleteUser(userId: string): boolean {
     let users = this.getUsers();
-    const initialLength = users.length;
     users = users.filter(u => u.userId !== userId);
     this.setItem(STORAGE_KEYS.USERS, users);
-
-    // Also clean up associated attendance records
-    let records = this.getAttendanceRecords();
-    records = records.filter(r => r.studentId !== userId);
-    this.setItem(STORAGE_KEYS.ATTENDANCE, records);
-
-    return users.length < initialLength;
+    return true;
   }
 
   // Class Management
@@ -611,18 +433,79 @@ export class StorageService {
     return this.getClasses().find(c => c.classId === classId);
   }
 
-  public static addClass(classItem: ClassItem): ClassItem {
+  public static addClass(cls: ClassItem): ClassItem {
     const classes = this.getClasses();
-    classes.push(classItem);
+    const existing = classes.find(c => c.classId.toLowerCase() === cls.classId.toLowerCase());
+    if (existing) {
+      Object.assign(existing, cls);
+    } else {
+      classes.push(cls);
+    }
     this.setItem(STORAGE_KEYS.CLASSES, classes);
-    return classItem;
+
+    // Write to Firestore
+    setDoc(doc(db, 'classes', cls.classId), cls, { merge: true }).catch(err => {
+      console.warn('Firestore addClass error:', err);
+    });
+
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+    return cls;
   }
 
   public static deleteClass(classId: string): void {
     let classes = this.getClasses();
     classes = classes.filter(c => c.classId !== classId);
     this.setItem(STORAGE_KEYS.CLASSES, classes);
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
   }
+
+  public static bulkImportStudents(newStudents: Omit<User, 'createdAt'>[]): { imported: number; errors: { row: number; studentId: string; reason: string }[] } {
+    const existingUsers = this.getUsers();
+    const existingIds = new Set(existingUsers.map(u => u.userId.toLowerCase()));
+    const errors: { row: number; studentId: string; reason: string }[] = [];
+    let imported = 0;
+
+    newStudents.forEach((student, index) => {
+      const rowNum = index + 2; // header is row 1
+      if (!student.userId) {
+        errors.push({ row: rowNum, studentId: 'N/A', reason: 'Missing Student ID' });
+        return;
+      }
+      if (!student.name) {
+        errors.push({ row: rowNum, studentId: student.userId, reason: 'Missing Student Name' });
+        return;
+      }
+      if (!student.classId) {
+        errors.push({ row: rowNum, studentId: student.userId, reason: 'Missing Class' });
+        return;
+      }
+
+      if (existingIds.has(student.userId.toLowerCase())) {
+        errors.push({ row: rowNum, studentId: student.userId, reason: 'Duplicate Student ID already exists' });
+        return;
+      }
+
+      const newUser: User = {
+        ...student,
+        createdAt: new Date().toISOString(),
+      };
+
+      existingUsers.push(newUser);
+      existingIds.add(newUser.userId.toLowerCase());
+      imported++;
+
+      // Write to Firestore
+      setDoc(doc(db, 'users', newUser.userId), newUser, { merge: true }).catch(err => {
+        console.warn('Firestore bulkImport error:', err);
+      });
+    });
+
+    this.setItem(STORAGE_KEYS.USERS, existingUsers);
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+
+    return { imported, errors };
+  }
+
 
   // Session Management
   public static getSessions(): AttendanceSession[] {
@@ -638,39 +521,35 @@ export class StorageService {
     if (!codeOrId) return undefined;
     const clean = codeOrId.trim().replace(/[-\s]/g, '').toLowerCase();
     const sessions = this.getSessions();
-    
-    // First look in active sessions
+
     const active = sessions.filter(s => s.status === 'active');
-    
-    // 1. Match active dailyCode
+
     const matchActiveCode = active.find(s => s.dailyCode && s.dailyCode.replace(/[-\s]/g, '').toLowerCase() === clean);
     if (matchActiveCode) return matchActiveCode;
 
-    // 2. Match active sessionId
     const matchActiveId = active.find(s => s.sessionId.toLowerCase() === clean || s.sessionId.toLowerCase().includes(clean));
     if (matchActiveId) return matchActiveId;
 
-    // 3. Match any session dailyCode
     const matchAnyCode = sessions.find(s => s.dailyCode && s.dailyCode.replace(/[-\s]/g, '').toLowerCase() === clean);
     if (matchAnyCode) return matchAnyCode;
 
-    // 4. Match any session ID
     return sessions.find(s => s.sessionId.toLowerCase() === clean);
   }
 
   public static startSession(classId: string, subject: string, teacherId: string): AttendanceSession {
     const sessions = this.getSessions();
-    
+    const now = new Date();
+    const newDailyCode = generateDailyCode();
+
     // Close any previous active session for this class
     sessions.forEach(s => {
       if (s.classId === classId && s.status === 'active') {
         s.status = 'completed';
-        s.endTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        s.endTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        // Update in Firestore
+        setDoc(doc(db, 'attendanceSessions', s.sessionId), s, { merge: true }).catch(() => {});
       }
     });
-
-    const now = new Date();
-    const newDailyCode = generateDailyCode(`${classId}_${now.toISOString()}`);
 
     const newSession: AttendanceSession = {
       sessionId: `SESS_${Date.now()}`,
@@ -686,6 +565,12 @@ export class StorageService {
 
     sessions.unshift(newSession);
     this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+
+    // Save active attendance session to shared Firestore collection
+    setDoc(doc(db, 'attendanceSessions', newSession.sessionId), newSession, { merge: true }).catch(err => {
+      console.warn('Firestore startSession error:', err);
+    });
+
     return newSession;
   }
 
@@ -705,7 +590,7 @@ export class StorageService {
     const records = this.getAttendanceRecords();
     classStudents.forEach(student => {
       if (!markedStudentIds.has(student.userId)) {
-        records.push({
+        const absentRecord: AttendanceRecord = {
           attendanceId: `ATT_${student.userId}_${sessionId}`,
           studentId: student.userId,
           sessionId: sessionId,
@@ -713,12 +598,20 @@ export class StorageService {
           date: session.date,
           time: new Date().toLocaleTimeString(),
           status: 'ABSENT',
-        });
+        };
+        records.push(absentRecord);
+        setDoc(doc(db, 'attendance', absentRecord.attendanceId), absentRecord, { merge: true }).catch(() => {});
       }
     });
 
     this.setItem(STORAGE_KEYS.ATTENDANCE, records);
     this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+
+    // Update session in Firestore
+    setDoc(doc(db, 'attendanceSessions', session.sessionId), session, { merge: true }).catch(err => {
+      console.warn('Firestore endSession error:', err);
+    });
+
     return session;
   }
 
@@ -739,8 +632,7 @@ export class StorageService {
     sessionIdOrDailyCode: string,
     studentIdOrQuery: string,
     studentLat?: number,
-    studentLon?: number,
-    bypassGeofence: boolean = false
+    studentLon?: number
   ): { success: boolean; message: string; distance?: number; record?: AttendanceRecord; session?: AttendanceSession } {
     let session = this.getSessions().find(s => s.sessionId === sessionIdOrDailyCode);
     if (!session) {
@@ -769,38 +661,45 @@ export class StorageService {
       };
     }
 
-    // Geofence Validation
+    // Mandatory Geofence Validation
     const classItem = this.getClassById(session.classId);
-    const isFenceActive = classItem ? (classItem.geofenceActive !== false) : true;
-    if (!bypassGeofence && isFenceActive && classItem && classItem.latitude !== undefined && classItem.longitude !== undefined) {
-      if (studentLat !== undefined && studentLon !== undefined) {
-        const radius = classItem.radius ?? 50; // default 50 metres
-        const distance = calculateDistanceMeters(studentLat, studentLon, classItem.latitude, classItem.longitude);
-
-        if (distance > radius) {
-          return {
-            success: false,
-            message: `Outside classroom area (${Math.round(distance)}m away, limit is ${radius}m).`,
-            distance: Math.round(distance),
-            session,
-          };
-        }
-      }
+    if (!classItem || classItem.latitude === undefined || classItem.longitude === undefined) {
+      return { success: false, message: 'Classroom location is not configured.' };
     }
 
+    if (studentLat === undefined || studentLon === undefined) {
+      return { success: false, message: 'Location permission is required to mark attendance.' };
+    }
+
+    const radius = classItem.radius ?? 50;
+    const distance = calculateDistanceMeters(studentLat, studentLon, classItem.latitude, classItem.longitude);
+
+    if (distance > radius) {
+      return {
+        success: false,
+        message: `You are outside the classroom area (${Math.round(distance)}m away, limit is ${radius}m).`,
+        distance: Math.round(distance),
+        session,
+      };
+    }
+
+    // Duplicate Attendance Prevention using deterministic ID: ATT_{studentId}_{sessionId}
     const records = this.getAttendanceRecords();
+    const deterministicId = `ATT_${student.userId}_${session.sessionId}`;
     const existing = records.find(r => r.sessionId === session.sessionId && r.studentId === student.userId);
 
     if (existing) {
-      existing.status = 'PRESENT';
-      existing.time = new Date().toLocaleTimeString();
-      this.setItem(STORAGE_KEYS.ATTENDANCE, records);
-      return { success: true, message: `✓ Attendance Verified & Recorded for ${student.name}!`, record: existing, session };
+      return {
+        success: false,
+        message: `Attendance already marked for this session.`,
+        record: existing,
+        session,
+      };
     }
 
     const now = new Date();
     const newRecord: AttendanceRecord = {
-      attendanceId: `ATT_${student.userId}_${Date.now()}`,
+      attendanceId: deterministicId,
       studentId: student.userId,
       sessionId: session.sessionId,
       classId: session.classId,
@@ -811,6 +710,12 @@ export class StorageService {
 
     records.push(newRecord);
     this.setItem(STORAGE_KEYS.ATTENDANCE, records);
+
+    // Save attendance record directly into shared Firestore database
+    setDoc(doc(db, 'attendance', deterministicId), newRecord, { merge: true }).catch(err => {
+      console.warn('Firestore markAttendance error:', err);
+    });
+
     return { success: true, message: `Attendance Marked Successfully for ${student.name}!`, record: newRecord, session };
   }
 
@@ -818,7 +723,7 @@ export class StorageService {
   public static getDashboardStats() {
     const students = this.getStudents().filter(s => s.status === 'active');
     const totalStudents = students.length;
-    
+
     const activeSession = this.getActiveSession();
     let presentToday = 0;
     let absentToday = 0;
@@ -828,7 +733,6 @@ export class StorageService {
       presentToday = records.filter(r => r.status === 'PRESENT').length;
       absentToday = records.filter(r => r.status === 'ABSENT').length;
     } else {
-      // Get today's total records across completed sessions today
       const todayRecords = this.getAttendanceRecords().filter(r => r.date === TODAY_STR);
       presentToday = todayRecords.filter(r => r.status === 'PRESENT').length;
       absentToday = todayRecords.filter(r => r.status === 'ABSENT').length;
@@ -862,7 +766,10 @@ export class StorageService {
     };
   }
 
-  public static updateClassGeofence(classId: string, data: { classroomName?: string; latitude: number; longitude: number; radius: number; geofenceActive?: boolean }) {
+  public static updateClassGeofence(
+    classId: string,
+    data: { classroomName?: string; latitude: number; longitude: number; radius: number; geofenceActive?: boolean }
+  ) {
     const classes = this.getClasses();
     const cls = classes.find(c => c.classId === classId);
     if (cls) {
@@ -870,52 +777,24 @@ export class StorageService {
       cls.latitude = data.latitude;
       cls.longitude = data.longitude;
       cls.radius = data.radius;
-      if (data.geofenceActive !== undefined) {
-        cls.geofenceActive = data.geofenceActive;
-      }
+      cls.geofenceActive = true;
       this.setItem(STORAGE_KEYS.CLASSES, classes);
+
+      // Save updated geofence to shared Firestore collection
+      setDoc(doc(db, 'classes', classId), cls, { merge: true }).catch(err => {
+        console.warn('Firestore updateClassGeofence error:', err);
+      });
     }
   }
 
-  // Timetable Management
+  // TimeTable
   public static getTimeTable(): TimeTableLecture[] {
     return this.getItem<TimeTableLecture[]>(STORAGE_KEYS.TIMETABLE, INITIAL_TIMETABLE);
   }
 
-  public static addTimeTableLecture(lecture: Omit<TimeTableLecture, 'id'>): TimeTableLecture {
-    const list = this.getTimeTable();
-    const newLecture: TimeTableLecture = {
-      ...lecture,
-      id: `TT_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-    };
-    list.push(newLecture);
-    this.setItem(STORAGE_KEYS.TIMETABLE, list);
-    return newLecture;
-  }
-
-  public static updateTimeTableLecture(lecture: TimeTableLecture): void {
-    const list = this.getTimeTable();
-    const idx = list.findIndex(l => l.id === lecture.id);
-    if (idx !== -1) {
-      list[idx] = lecture;
-      this.setItem(STORAGE_KEYS.TIMETABLE, list);
-    }
-  }
-
-  public static deleteTimeTableLecture(id: string): void {
-    const list = this.getTimeTable().filter(l => l.id !== id);
-    this.setItem(STORAGE_KEYS.TIMETABLE, list);
-  }
-
-  public static getDayName(date: Date): DayOfWeek {
+  private static getDayName(d: Date): DayOfWeek {
     const days: DayOfWeek[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    return days[date.getDay()];
-  }
-
-  public static getLecturesForDay(day: DayOfWeek): TimeTableLecture[] {
-    return this.getTimeTable()
-      .filter(l => l.dayOfWeek === day && !l.specificDate)
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    return days[d.getDay()];
   }
 
   public static getLecturesForDate(date: Date): { lectures: TimeTableLecture[]; dayOfWeek: DayOfWeek; dateStr: string } {
@@ -923,7 +802,6 @@ export class StorageService {
     const dateStr = date.toISOString().split('T')[0];
     const all = this.getTimeTable();
 
-    // Matching day of week OR specific date override
     const matching = all.filter(l => {
       if (l.specificDate) {
         return l.specificDate === dateStr;
@@ -931,7 +809,6 @@ export class StorageService {
       return l.dayOfWeek === dayOfWeek;
     });
 
-    // Helper sort function for "09:00 AM" style times
     matching.sort((a, b) => {
       const parseTime = (t: string) => {
         const [timePart, period] = t.split(' ');
@@ -963,5 +840,5 @@ export function calculateDistanceMeters(lat1: number, lon1: number, lat2: number
   return R * c;
 }
 
-// Ensure storage is initialized on module load
+// Ensure storage & Firestore listeners are initialized on module load
 StorageService.init();

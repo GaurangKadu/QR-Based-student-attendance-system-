@@ -3,27 +3,34 @@ import { User } from './types';
 import { AuthService } from './services/authService';
 import { Sidebar } from './components/Sidebar';
 import { LoginPage } from './components/LoginPage';
-import { TeacherDashboardOverview } from './components/teacher/TeacherDashboardOverview';
 import { AttendanceSessionManager } from './components/teacher/AttendanceSessionManager';
-import { ReportsView } from './components/teacher/ReportsView';
 import { GeofenceSettingsView } from './components/teacher/GeofenceSettingsView';
+import { StudentRosterView } from './components/teacher/StudentRosterView';
+import { ReportsView } from './components/teacher/ReportsView';
 import { StudentDashboard } from './components/student/StudentDashboard';
 import { StudentHistoryDashboard } from './components/student/StudentHistoryDashboard';
-import { Clock, ShieldCheck } from 'lucide-react';
+import { StudentQRScannerModal } from './components/student/StudentQRScannerModal';
+import {
+  Clock,
+  LayoutDashboard,
+  Scan,
+  History,
+  BookOpen,
+  MapPin,
+  Users,
+  FileText
+} from 'lucide-react';
+import { testFirestoreConnection } from './lib/firebase';
 
 export default function App() {
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<string>('attendance');
-  const [targetClassId, setTargetClassId] = useState<string | undefined>(undefined);
   const [now, setNow] = useState<Date>(new Date());
   const [scannerModalOpen, setScannerModalOpen] = useState<boolean>(false);
 
-  const handleNavigate = (tab: string, classId?: string) => {
-    setActiveTab(tab);
-    setTargetClassId(classId);
-  };
-
   useEffect(() => {
+    testFirestoreConnection();
     const user = AuthService.getCurrentUser();
     if (user) {
       setCurrentUser(user);
@@ -45,14 +52,16 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans antialiased transition-colors duration-200">
+      <div className="min-h-screen bg-slate-100 text-slate-900 font-sans antialiased">
         <LoginPage onLoginSuccess={handleUserChange} />
       </div>
     );
   }
 
+  const isStudent = currentUser.role === 'student';
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans antialiased flex flex-col lg:flex-row transition-colors duration-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans antialiased flex flex-col lg:flex-row pb-16 lg:pb-0">
       {/* Sidebar Navigation */}
       <Sidebar
         currentUser={currentUser}
@@ -64,56 +73,154 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Desktop Top Header Bar with Live Date, Day, Time */}
-        <header className="hidden lg:flex items-center justify-end bg-white dark:bg-slate-900 border-b border-slate-200/80 dark:border-slate-800 px-8 py-3.5 sticky top-0 z-30 transition-colors shadow-2xs">
-          <div className="flex items-center gap-3">
-            {/* Live Date, Day & Time Badge */}
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/90 text-slate-800 dark:text-slate-200 px-3.5 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs font-bold shadow-2xs">
-              <Clock className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
-              <span>
-                {now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
-              </span>
-              <span className="text-blue-500 font-extrabold">•</span>
-              <span className="font-mono text-blue-600 dark:text-blue-400 font-extrabold">
-                {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-              </span>
-            </div>
+        {/* Header Bar */}
+        <header className="hidden lg:flex items-center justify-between bg-white border-b border-slate-200 px-6 py-3 sticky top-0 z-30">
+          <div>
+            <span className="text-sm font-bold text-slate-900">QR Attendance</span>
+            <span className="text-slate-400 text-xs mx-2">|</span>
+            <span className="text-xs text-slate-500 font-normal">
+              Digital Student Attendance Management System
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 text-xs text-slate-600 font-medium">
+            <Clock className="w-3.5 h-3.5 text-slate-400" />
+            <span>
+              {now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+            </span>
+            <span>•</span>
+            <span className="font-mono text-slate-800">
+              {now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+            </span>
           </div>
         </header>
 
-        <main className="flex-1 p-3 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
-          {/* Tab Content Rendering */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-6xl w-full mx-auto">
           {currentUser.role === 'teacher' ? (
             <>
-              {(activeTab === 'attendance' || activeTab === 'dashboard') && <AttendanceSessionManager onNavigate={handleNavigate} />}
+              {(activeTab === 'attendance' || activeTab === 'dashboard') && (
+                <AttendanceSessionManager onNavigate={(tab) => setActiveTab(tab)} />
+              )}
               {activeTab === 'geofence' && <GeofenceSettingsView />}
+              {activeTab === 'students' && <StudentRosterView />}
               {activeTab === 'reports' && <ReportsView />}
             </>
+          ) : activeTab === 'student_history' ? (
+            <StudentHistoryDashboard
+              student={currentUser}
+              onBackToDashboard={() => setActiveTab('student_dash')}
+            />
           ) : (
-            activeTab === 'student_history' ? (
-              <StudentHistoryDashboard
-                student={currentUser}
-                onBackToDashboard={() => setActiveTab('student_dash')}
-              />
-            ) : (
-              <StudentDashboard
-                student={currentUser}
-                onOpenHistoryDashboard={() => setActiveTab('student_history')}
-                externalScannerOpen={scannerModalOpen}
-                onCloseExternalScanner={() => setScannerModalOpen(false)}
-              />
-            )
+            <StudentDashboard
+              student={currentUser}
+              onOpenHistoryDashboard={() => setActiveTab('student_history')}
+              onOpenScannerModal={() => setScannerModalOpen(true)}
+            />
           )}
         </main>
 
+        {/* Student Scanner Modal Trigger */}
+        {currentUser.role === 'student' && scannerModalOpen && (
+          <StudentQRScannerModal
+            student={currentUser}
+            onClose={() => setScannerModalOpen(false)}
+            onScanSuccess={() => {}}
+          />
+        )}
+
+        {/* Mobile Bottom Navigation Bar */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 px-3 py-1.5 flex items-center justify-around shadow-lg">
+          {isStudent ? (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('student_dash')}
+                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg cursor-pointer transition ${
+                  activeTab === 'student_dash' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <LayoutDashboard className="w-5 h-5" />
+                <span className="text-[10px]">Dashboard</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setScannerModalOpen(true)}
+                className="flex flex-col items-center gap-1 py-1 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-xs cursor-pointer transition -mt-3"
+              >
+                <Scan className="w-5 h-5" />
+                <span className="text-[10px] font-bold">Scan QR</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('student_history')}
+                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg cursor-pointer transition ${
+                  activeTab === 'student_history' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <History className="w-5 h-5" />
+                <span className="text-[10px]">History</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setActiveTab('attendance')}
+                className={`flex flex-col items-center gap-1 py-1 px-2 rounded-lg cursor-pointer transition ${
+                  activeTab === 'attendance' || activeTab === 'dashboard' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <BookOpen className="w-5 h-5" />
+                <span className="text-[10px]">Attendance</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('geofence')}
+                className={`flex flex-col items-center gap-1 py-1 px-2 rounded-lg cursor-pointer transition ${
+                  activeTab === 'geofence' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <MapPin className="w-5 h-5" />
+                <span className="text-[10px]">Geofence</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('students')}
+                className={`flex flex-col items-center gap-1 py-1 px-2 rounded-lg cursor-pointer transition ${
+                  activeTab === 'students' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-5 h-5" />
+                <span className="text-[10px]">Students</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('reports')}
+                className={`flex flex-col items-center gap-1 py-1 px-2 rounded-lg cursor-pointer transition ${
+                  activeTab === 'reports' ? 'text-blue-600 font-semibold' : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <FileText className="w-5 h-5" />
+                <span className="text-[10px]">Reports</span>
+              </button>
+            </>
+          )}
+        </nav>
+
         {/* Footer */}
-        <footer className="bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 py-4 px-4 text-center text-xs text-slate-500 dark:text-slate-400 mt-auto transition-colors">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-            <p>© 2026 QR Code Digital Student Attendance Management System</p>
-            <p className="font-semibold text-blue-600 dark:text-blue-400">2nd-Year IT Engineering Mini Project</p>
+        <footer className="bg-white border-t border-slate-200 py-3 px-6 text-center text-xs text-slate-500 mt-auto">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1">
+            <p>QR Attendance • Digital Student Attendance Management System</p>
+            <p className="font-medium text-slate-700">IT Engineering Department</p>
           </div>
         </footer>
       </div>
     </div>
   );
-};
+}
+

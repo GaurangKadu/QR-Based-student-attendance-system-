@@ -1,185 +1,196 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StorageService } from '../../services/storageService';
 import { ClassItem, AttendanceSession } from '../../types';
 import { SessionQRModal } from './SessionQRModal';
-import { ClassDetailModal } from './ClassDetailModal';
-import { CreateClassModal } from './CreateClassModal';
-import {
-  BookOpen,
-  Layers,
-  QrCode,
-  CheckCircle2,
-  Sparkles,
-  Plus
-} from 'lucide-react';
+import { BookOpen, QrCode, Plus, X } from 'lucide-react';
 
-export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, classId?: string) => void }> = ({ onNavigate }) => {
+export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, classId?: string) => void }> = () => {
   const [classes, setClasses] = useState<ClassItem[]>(StorageService.getClasses());
+  const [selectedClassId, setSelectedClassId] = useState<string>(classes[0]?.classId || '');
+  const [selectedSubject, setSelectedSubject] = useState<string>(classes[0]?.subject || '');
+  
   const [activeSession, setActiveSession] = useState<AttendanceSession | null>(
     StorageService.getSessions().find(s => s.status === 'active') || null
   );
   const [showSessionModal, setShowSessionModal] = useState<boolean>(false);
-  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
-  const [selectedClassForModal, setSelectedClassForModal] = useState<ClassItem | null>(null);
+  const [showAddClassModal, setShowAddClassModal] = useState<boolean>(false);
+
+  // New Class Form State
+  const [newClassName, setNewClassName] = useState('');
+  const [newYear, setNewYear] = useState('2nd Year');
+  const [newSemester, setNewSemester] = useState('Semester IV');
+  const [newDivision, setNewDivision] = useState('A');
+  const [newSubject, setNewSubject] = useState('');
+  const [newVenue, setNewVenue] = useState('Computer Lab 1');
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      const updatedClasses = StorageService.getClasses();
+      setClasses(updatedClasses);
+      setActiveSession(StorageService.getSessions().find(s => s.status === 'active') || null);
+    };
+    window.addEventListener('qr_attendance_updated', handleUpdate);
+    return () => window.removeEventListener('qr_attendance_updated', handleUpdate);
+  }, []);
 
   const refreshData = () => {
     setClasses(StorageService.getClasses());
     setActiveSession(StorageService.getSessions().find(s => s.status === 'active') || null);
   };
 
-  const handleStartSessionForClass = (e: React.MouseEvent, cls: ClassItem) => {
-    e.stopPropagation();
-    const sess = StorageService.startSession(cls.classId, cls.subject, 'Teacher1');
+  const handleClassChange = (cId: string) => {
+    setSelectedClassId(cId);
+    const cls = classes.find(c => c.classId === cId);
+    if (cls) {
+      setSelectedSubject(cls.subject);
+    }
+  };
+
+  const handleStartAttendance = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClassId) return;
+    const cls = classes.find(c => c.classId === selectedClassId);
+    const subj = selectedSubject || cls?.subject || 'Lecture';
+    const sess = StorageService.startSession(selectedClassId, subj, 'Teacher1');
     setActiveSession(sess);
     setShowSessionModal(true);
     refreshData();
   };
 
-  const handleStartSessionFromModal = (cls: ClassItem) => {
-    const sess = StorageService.startSession(cls.classId, cls.subject, 'Teacher1');
-    setActiveSession(sess);
-    setSelectedClassForModal(null);
-    setShowSessionModal(true);
-    refreshData();
+  const handleSaveNewClass = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClassName || !newSubject) return;
+
+    const classId = `CLASS_${newClassName.replace(/\s+/g, '_').toUpperCase()}`;
+    const newClassObj: ClassItem = {
+      classId,
+      className: newClassName,
+      year: newYear,
+      semester: newSemester,
+      division: newDivision,
+      subject: newSubject,
+      totalStudents: 60,
+      classroomName: newVenue,
+      latitude: 19.0760,
+      longitude: 72.8777,
+      radius: 50,
+      geofenceActive: true,
+    };
+
+    StorageService.addClass(newClassObj);
+    const updated = StorageService.getClasses();
+    setClasses(updated);
+    setSelectedClassId(classId);
+    setSelectedSubject(newSubject);
+    setShowAddClassModal(false);
+    setNewClassName('');
+    setNewSubject('');
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 rounded-2xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white flex items-center gap-2.5 tracking-tight">
-            <BookOpen className="w-7 h-7 text-blue-600 dark:text-blue-400" /> Class Room Management
+          <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-slate-700" /> Attendance
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Click any classroom card to open the student analytical board and student management roster.
+          <p className="text-xs text-slate-500 mt-1">
+            Start an attendance session for your class.
           </p>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setShowAddClassModal(true)}
+          className="py-2 px-3 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition cursor-pointer flex items-center gap-1.5 shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>ADD CLASS</span>
+        </button>
+      </div>
+
+      {/* Primary Session Start Form */}
+
+      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-xs">
+        <form onSubmit={handleStartAttendance} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Class
+              </label>
+              <select
+                value={selectedClassId}
+                onChange={e => handleClassChange(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+              >
+                {classes.map(c => (
+                  <option key={c.classId} value={c.classId}>
+                    {c.className} ({c.subject})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                Subject
+              </label>
+              <input
+                type="text"
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+                placeholder="Enter Subject Name"
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-blue-600"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-between gap-3">
+            <button
+              type="submit"
+              className="py-2.5 px-5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg transition cursor-pointer flex items-center gap-2"
+            >
+              <QrCode className="w-4 h-4" />
+              <span>START ATTENDANCE</span>
+            </button>
+
+            {activeSession && (
+              <button
+                type="button"
+                onClick={() => setShowSessionModal(true)}
+                className="py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs rounded-lg transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>View Active QR</span>
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* Active Session Indicator */}
+      {activeSession && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center justify-between text-xs text-emerald-900">
+          <div>
+            <span className="font-bold text-emerald-800 uppercase tracking-wider text-[10px] block">
+              Active Session Running
+            </span>
+            <p className="font-semibold mt-0.5">
+              {StorageService.getClassById(activeSession.classId)?.className} — {activeSession.subject}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
+            onClick={() => setShowSessionModal(true)}
+            className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg text-xs transition cursor-pointer"
           >
-            <Plus className="w-4 h-4" /> Create New Class
+            Show Attendance QR
           </button>
-
-          {activeSession && (
-            <button
-              type="button"
-              onClick={() => setShowSessionModal(true)}
-              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold rounded-xl text-xs shadow-md flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
-            >
-              <QrCode className="w-4 h-4" /> View Active Session QR
-            </button>
-          )}
         </div>
-      </div>
-
-      {/* Class Rooms List / Grid Section */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {classes.map(cls => {
-          const students = StorageService.getStudents().filter(s => s.classId === cls.classId);
-          const total = students.length;
-          
-          const sessionRecords = activeSession && activeSession.classId === cls.classId
-            ? StorageService.getAttendanceForSession(activeSession.sessionId)
-            : StorageService.getAttendanceRecords().filter(r => r.classId === cls.classId);
-          
-          const presentIds = new Set(sessionRecords.filter(r => r.status === 'PRESENT').map(r => r.studentId));
-          const present = presentIds.size;
-          const absent = Math.max(0, total - present);
-          const hasActiveSess = activeSession?.classId === cls.classId;
-
-          return (
-            <div
-              key={cls.classId}
-              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 cursor-pointer hover:border-blue-300 dark:hover:border-blue-700 group"
-              onClick={() => setSelectedClassForModal(cls)}
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
-                    {cls.year || '2nd Year'}
-                  </span>
-
-                  {hasActiveSess && (
-                    <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block shadow-xs shadow-emerald-400"></span> Live • Code: {activeSession?.dailyCode || 'Active'}
-                    </span>
-                  )}
-                </div>
-
-                <h3 className="font-black text-slate-900 dark:text-white text-base mt-2 tracking-tight group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
-                  {cls.className}
-                </h3>
-
-                <p className="text-xs font-bold text-slate-600 dark:text-slate-300 mt-1.5 flex items-center gap-1.5">
-                  <Layers className="w-3.5 h-3.5 text-blue-600" /> {cls.subject}
-                </p>
-
-                {/* Statistics Box */}
-                <div className="mt-4 p-3.5 bg-slate-50 dark:bg-slate-800/70 rounded-2xl border border-slate-100 dark:border-slate-800 grid grid-cols-3 gap-2 text-center">
-                  <div>
-                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Present</p>
-                    <p className="text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5">{present}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Absent</p>
-                    <p className="text-base font-black text-rose-600 dark:text-rose-400 mt-0.5">{absent}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">Capacity</p>
-                    <p className="text-base font-black text-blue-600 dark:text-blue-400 mt-0.5">{cls.totalStudents || total}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={(e) => handleStartSessionForClass(e, cls)}
-                  className={`w-full py-2.5 px-3 rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition min-h-[40px] cursor-pointer shadow-xs ${
-                    hasActiveSess
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                      : 'bg-slate-900 hover:bg-slate-800 text-white dark:bg-blue-600 dark:hover:bg-blue-700'
-                  }`}
-                >
-                  <QrCode className="w-4 h-4" />
-                  {hasActiveSess ? 'View Session QR' : 'Start Attendance & QR'}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Modal: Create Class */}
-      {showCreateModal && (
-        <CreateClassModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            refreshData();
-          }}
-        />
       )}
 
-      {/* Modal: Class Detail / Student Analytical Board & Management */}
-      {selectedClassForModal && (
-        <ClassDetailModal
-          cls={selectedClassForModal}
-          activeSession={activeSession}
-          onClose={() => {
-            setSelectedClassForModal(null);
-            refreshData();
-          }}
-          onStartSession={handleStartSessionFromModal}
-        />
-      )}
-
-      {/* Modal: Session QR Modal */}
+      {/* Session QR Modal */}
       {showSessionModal && activeSession && (
         <SessionQRModal
           session={activeSession}
@@ -189,6 +200,104 @@ export const AttendanceSessionManager: React.FC<{ onNavigate: (tab: string, clas
           }}
         />
       )}
+
+      {/* Add Class Modal */}
+      {showAddClassModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-md w-full p-6 relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="text-base font-bold text-slate-900">Add New Class</h2>
+              <button
+                type="button"
+                onClick={() => setShowAddClassModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveNewClass} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Class Name</label>
+                <input
+                  type="text"
+                  value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                  placeholder="e.g. TE IT - Div B"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Year</label>
+                  <input
+                    type="text"
+                    value={newYear}
+                    onChange={e => setNewYear(e.target.value)}
+                    placeholder="3rd Year"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Division</label>
+                  <input
+                    type="text"
+                    value={newDivision}
+                    onChange={e => setNewDivision(e.target.value)}
+                    placeholder="B"
+                    className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Default Subject</label>
+                <input
+                  type="text"
+                  value={newSubject}
+                  onChange={e => setNewSubject(e.target.value)}
+                  placeholder="e.g. Database Management Systems"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Classroom / Venue</label>
+                <input
+                  type="text"
+                  value={newVenue}
+                  onChange={e => setNewVenue(e.target.value)}
+                  placeholder="e.g. Lab 402"
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:border-blue-600"
+                  required
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowAddClassModal(false)}
+                  className="px-4 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-medium rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg"
+                >
+                  CREATE CLASS
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
