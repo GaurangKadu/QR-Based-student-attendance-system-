@@ -528,32 +528,49 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
     reader.onload = (event) => {
       img.onload = () => {
-        const offscreenCanvas = document.createElement('canvas');
-        const ctx = offscreenCanvas.getContext('2d');
-        if (!ctx) {
-          setUploadError('Unable to process image file.');
-          return;
+        const decodeFromCanvas = (width: number, height: number): string | null => {
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return null;
+          canvas.width = width;
+          canvas.height = height;
+          ctx.drawImage(img, 0, 0, width, height);
+          const imageData = ctx.getImageData(0, 0, width, height);
+          const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+          return decoded?.data || null;
+        };
+
+        // Try original resolution first
+        let qrData = decodeFromCanvas(img.width, img.height);
+
+        // If not found and image is large (> 1000px), try downscaling
+        if (!qrData && (img.width > 1000 || img.height > 1000)) {
+          const maxDim = 800;
+          const scale = Math.min(maxDim / img.width, maxDim / img.height);
+          qrData = decodeFromCanvas(Math.round(img.width * scale), Math.round(img.height * scale));
         }
 
-        offscreenCanvas.width = img.width;
-        offscreenCanvas.height = img.height;
-        ctx.drawImage(img, 0, 0, img.width, img.height);
-
-        const imageData = ctx.getImageData(0, 0, img.width, img.height);
-        const decoded = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: 'dontInvert',
-        });
-
-        if (decoded && decoded.data) {
-          processAttendanceQR(decoded.data);
+        if (qrData) {
+          processAttendanceQR(qrData);
         } else {
-          setUploadError('Invalid QR Code. No attendance session QR detected in the selected image.');
+          setUploadError('No valid attendance QR code detected in the selected image. Please try another screenshot or image.');
         }
+      };
+      img.onerror = () => {
+        setUploadError('Unable to load image file. Please try another image.');
       };
       img.src = event.target?.result as string;
     };
 
+    reader.onerror = () => {
+      setUploadError('Failed to read image file.');
+    };
+
     reader.readAsDataURL(file);
+    // Reset value so user can re-select the same file if needed
+    e.target.value = '';
   };
 
   const handleManualFormSubmit = (e: React.FormEvent) => {
@@ -831,7 +848,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
               </div>
             )}
 
-            {/* TAB 2: Upload QR Image with Native Mobile Camera Fallback */}
+            {/* TAB 2: Upload QR Image */}
             {activeTab === 'upload' && (
               <div className="space-y-3 py-2">
                 <div className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-lg p-6 text-center space-y-3 bg-slate-50">
@@ -840,7 +857,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                   </div>
                   <div>
                     <p className="text-xs font-bold text-slate-900">Upload Attendance QR Image</p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">Select a QR photo or take a photo with camera</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">Select a QR photo, screenshot, or image file</p>
                   </div>
 
                   <button
@@ -857,7 +874,6 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                     ref={fileInputRef}
                     onChange={handleImageFileChange}
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                   />
                 </div>
