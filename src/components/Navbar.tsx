@@ -36,10 +36,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   const handleResetDemoData = () => {
-    if (window.confirm('Reset all demo data back to initial default state?')) {
-      StorageService.resetToDemo();
-      window.location.reload();
-    }
+    StorageService.resetToDemo();
+    window.location.reload();
   };
 
   return (

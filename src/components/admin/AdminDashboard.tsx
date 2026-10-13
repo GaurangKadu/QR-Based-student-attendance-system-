@@ -98,6 +98,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Status Alerts
   const [alertMsg, setAlertMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // In-App Delete Confirmation Modal (fixes window.confirm blocked in iframe)
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    type: 'class' | 'teacher' | 'student';
+    id: string;
+    name: string;
+  } | null>(null);
+
   // Form States - Create Class
   const [newClassName, setNewClassName] = useState('');
   const [newSubject, setNewSubject] = useState('');
@@ -433,14 +440,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
-  // Delete Classroom
+  // Delete Classroom - trigger in-app modal
   const handleDeleteClass = (classId: string, className: string) => {
-    if (window.confirm(`Are you sure you want to remove classroom "${className}"?`)) {
-      playDeleteSound();
-      StorageService.deleteClass(classId);
-      loadData();
-      showNotification('success', `Classroom "${className}" deleted.`);
-    }
+    playPopSound();
+    setDeleteConfirm({ type: 'class', id: classId, name: className });
   };
 
   // Toggle User Status
@@ -451,14 +454,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     showNotification('success', `Updated account status for ${name}.`);
   };
 
-  // Delete User
+  // Delete User - trigger in-app modal
   const handleDeleteUser = (userId: string, name: string) => {
-    if (window.confirm(`Are you sure you want to delete user "${name}" (${userId})?`)) {
-      playDeleteSound();
-      StorageService.deleteUser(userId);
-      loadData();
-      showNotification('success', `User "${name}" removed.`);
+    playPopSound();
+    const isTeacher = teachers.some(t => t.userId === userId);
+    setDeleteConfirm({ type: isTeacher ? 'teacher' : 'student', id: userId, name });
+  };
+
+  // Execute Confirmed Delete (works reliably without window.confirm in iframe)
+  const executeConfirmedDelete = () => {
+    if (!deleteConfirm) return;
+    playDeleteSound();
+    if (deleteConfirm.type === 'class') {
+      StorageService.deleteClass(deleteConfirm.id);
+      setIsEditClassOpen(false);
+      setEditingClass(null);
+      showNotification('success', `Classroom "${deleteConfirm.name}" deleted.`);
+    } else {
+      StorageService.deleteUser(deleteConfirm.id);
+      setIsEditTeacherOpen(false);
+      setEditingTeacher(null);
+      setIsAddStudentOpen(false);
+      setEditingStudent(null);
+      showNotification('success', `Account "${deleteConfirm.name}" deleted.`);
     }
+    loadData();
+    setDeleteConfirm(null);
   };
 
   // Toggle Geofence on Classroom
@@ -561,7 +582,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
 
           {classViewMode === 'card' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[calc(100dvh-230px)] sm:max-h-none overflow-y-auto overscroll-contain">
               {filteredClasses.map(cls => {
                 const classStudentCount = students.filter(s => s.classId === cls.classId).length;
                 return (
@@ -681,43 +702,46 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               })}
             </div>
           ) : (
-            <div className="nm-card overflow-hidden w-full max-w-full">
-              {/* Mobile View: Clean Responsive Cards (sm:hidden) */}
-              <div className="block sm:hidden divide-y divide-slate-100">
+            <div className="nm-card overflow-hidden w-full max-w-full flex flex-col max-h-[calc(100dvh-230px)] sm:max-h-none">
+              {/* Mobile View: Clean Responsive Vertically Fitted Cards (sm:hidden) */}
+              <div className="block sm:hidden divide-y divide-slate-100 overflow-y-auto overscroll-contain flex-1">
                 {filteredClasses.length === 0 ? (
                   <div className="p-4 text-center text-xs text-slate-500">No classrooms found.</div>
                 ) : (
                   filteredClasses.map(cls => (
-                    <div key={cls.classId} className="p-3.5 space-y-2.5">
+                    <div key={cls.classId} className="p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="font-bold text-slate-900 text-sm tracking-tight">{cls.className}</div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-bold text-slate-900 text-sm tracking-tight truncate">{cls.className}</span>
+                          <span className="text-[11px] text-slate-500 truncate">• {cls.subject}</span>
+                        </div>
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${cls.geofenceActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'}`}>
                           {cls.geofenceActive ? 'Active' : 'Disabled'}
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">Subject</span>
-                          <span className="text-slate-700 font-medium truncate block">{cls.subject}</span>
+                      <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] bg-slate-50/80 p-2 rounded-lg border border-slate-100">
+                        <div className="truncate">
+                          <span className="text-slate-400">Teacher: </span>
+                          <span className="text-slate-700 font-medium">{cls.teacherName || 'Not Assigned'}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 text-[10px] block">Teacher</span>
-                          <span className="text-slate-700 font-medium truncate block">{cls.teacherName || 'Not Assigned'}</span>
+                          <span className="text-slate-400">Students: </span>
+                          <span className="text-slate-700 font-medium">{students.filter(s => s.classId === cls.classId).length}</span>
+                        </div>
+                        <div className="truncate">
+                          <span className="text-slate-400">Room: </span>
+                          <span className="text-slate-700 font-medium">{cls.classroomName || 'Room 201'}</span>
                         </div>
                         <div>
-                          <span className="text-slate-400 text-[10px] block">Students</span>
-                          <span className="text-slate-700 font-medium block">{students.filter(s => s.classId === cls.classId).length} Enrolled</span>
-                        </div>
-                        <div>
-                          <span className="text-slate-400 text-[10px] block">Boundary</span>
-                          <span className="text-slate-700 font-medium block">{cls.radius || 50}m Radius</span>
+                          <span className="text-slate-400">Boundary: </span>
+                          <span className="text-slate-700 font-medium">{cls.radius || 50}m</span>
                         </div>
                       </div>
-                      <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-50">
+                      <div className="flex items-center justify-end gap-2 pt-0.5">
                         <button
                           type="button"
                           onClick={() => handleOpenEditClass(cls)}
-                          className="text-blue-700 nm-btn font-semibold text-xs px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          className="text-blue-700 nm-btn font-semibold text-xs px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
                         >
                           <Pencil className="w-3 h-3" />
                           <span>Edit</span>
@@ -725,7 +749,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         <button
                           type="button"
                           onClick={() => handleDeleteClass(cls.classId, cls.className)}
-                          className="text-rose-700 nm-btn-danger font-semibold text-xs px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
+                          className="text-rose-700 nm-btn-danger font-semibold text-xs px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 shadow-2xs"
                         >
                           <Trash2 className="w-3 h-3" />
                           <span>Delete</span>
@@ -762,12 +786,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => handleOpenEditClass(cls)}
-                            className="text-blue-700 nm-btn font-semibold text-[11px] px-2 py-1 rounded-md transition cursor-pointer"
-                          >
-                            Edit
-                          </button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditClass(cls)}
+                              className="text-blue-700 nm-btn font-semibold text-[11px] px-2 py-1 rounded-md transition cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClass(cls.classId, cls.className)}
+                              className="text-rose-700 nm-btn-danger font-semibold text-[11px] px-2 py-1 rounded-md transition cursor-pointer flex items-center gap-1"
+                              title="Delete Classroom"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                              <span>Delete</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2192,6 +2226,40 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* ========================================================= */}
+      {/* IN-APP CONFIRMATION MODAL: DELETE CONFIRMATION */}
+      {/* ========================================================= */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 animate-nm-enter">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 border border-slate-200">
+            <div className="w-12 h-12 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4 border border-rose-100">
+              <Trash2 className="w-6 h-6" />
+            </div>
+            <h3 className="font-bold text-slate-900 text-base text-center mb-1">
+              Delete {deleteConfirm.type === 'class' ? 'Classroom' : 'Account'}?
+            </h3>
+            <p className="text-xs text-slate-500 text-center mb-6 leading-relaxed">
+              Are you sure you want to delete <strong className="text-slate-800 font-semibold">{deleteConfirm.name}</strong>? This action cannot be undone.
+            </p>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs rounded-xl transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeConfirmedDelete}
+                className="flex-1 py-2.5 px-4 bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs rounded-xl transition cursor-pointer shadow-sm shadow-rose-600/30"
+              >
+                Delete Now
+              </button>
+            </div>
           </div>
         </div>
       )}

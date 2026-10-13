@@ -118,11 +118,9 @@ export const ScheduleView: React.FC<ScheduleViewProps> = ({ currentUser }) => {
   };
 
   const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this scheduled lecture?')) {
-      playDeleteSound();
-      StorageService.deleteTimeTableLecture(id);
-      loadData();
-    }
+    playDeleteSound();
+    StorageService.deleteTimeTableLecture(id);
+    loadData();
   };
 
   const activeLectures = getFilteredLectures();
