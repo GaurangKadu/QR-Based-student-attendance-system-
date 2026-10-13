@@ -462,21 +462,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   };
 
   // Execute Confirmed Delete (works reliably without window.confirm in iframe)
-  const executeConfirmedDelete = () => {
+  const executeConfirmedDelete = async () => {
     if (!deleteConfirm) return;
     playDeleteSound();
     if (deleteConfirm.type === 'class') {
-      StorageService.deleteClass(deleteConfirm.id);
+      await StorageService.deleteClass(deleteConfirm.id);
       setIsEditClassOpen(false);
       setEditingClass(null);
-      showNotification('success', `Classroom "${deleteConfirm.name}" deleted.`);
+      showNotification('success', `Classroom "${deleteConfirm.name}" deleted permanently.`);
     } else {
-      StorageService.deleteUser(deleteConfirm.id);
+      await StorageService.deleteUser(deleteConfirm.id);
       setIsEditTeacherOpen(false);
       setEditingTeacher(null);
       setIsAddStudentOpen(false);
       setEditingStudent(null);
-      showNotification('success', `Account "${deleteConfirm.name}" deleted.`);
+      showNotification('success', `Account "${deleteConfirm.name}" deleted permanently.`);
     }
     loadData();
     setDeleteConfirm(null);

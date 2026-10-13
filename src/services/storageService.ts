@@ -8,6 +8,7 @@ import {
   getDocs,
   onSnapshot,
   updateDoc,
+  deleteDoc,
   query,
   where
 } from 'firebase/firestore';
@@ -15,6 +16,8 @@ import {
 const STORAGE_KEYS = {
   USERS: 'qr_attendance_users',
   CLASSES: 'qr_attendance_classes',
+  DELETED_CLASSES: 'qr_attendance_deleted_classes',
+  DELETED_USERS: 'qr_attendance_deleted_users',
   SESSIONS: 'qr_attendance_sessions',
   ATTENDANCE: 'qr_attendance_records',
   CURRENT_USER: 'qr_attendance_current_user',
@@ -235,6 +238,40 @@ export class StorageService {
     }
   }
 
+  public static getDeletedClassIds(): string[] {
+    return this.getItem<string[]>(STORAGE_KEYS.DELETED_CLASSES, []);
+  }
+
+  public static addDeletedClassId(id: string): void {
+    const deleted = this.getDeletedClassIds();
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      this.setItem(STORAGE_KEYS.DELETED_CLASSES, deleted);
+    }
+  }
+
+  public static removeDeletedClassId(id: string): void {
+    const deleted = this.getDeletedClassIds().filter(d => d !== id);
+    this.setItem(STORAGE_KEYS.DELETED_CLASSES, deleted);
+  }
+
+  public static getDeletedUserIds(): string[] {
+    return this.getItem<string[]>(STORAGE_KEYS.DELETED_USERS, []);
+  }
+
+  public static addDeletedUserId(id: string): void {
+    const deleted = this.getDeletedUserIds();
+    if (!deleted.includes(id)) {
+      deleted.push(id);
+      this.setItem(STORAGE_KEYS.DELETED_USERS, deleted);
+    }
+  }
+
+  public static removeDeletedUserId(id: string): void {
+    const deleted = this.getDeletedUserIds().filter(d => d !== id);
+    this.setItem(STORAGE_KEYS.DELETED_USERS, deleted);
+  }
+
   // Initialize and attach Firestore real-time listeners for shared attendance state across devices
   public static init(): void {
     if (!localStorage.getItem(STORAGE_KEYS.USERS)) {
@@ -287,13 +324,18 @@ export class StorageService {
 
       // 3. Sync Classes & Geofence Settings from Firestore
       onSnapshot(collection(db, 'classes'), (snapshot) => {
+        const deletedIds = this.getDeletedClassIds();
         const classes: ClassItem[] = [];
         snapshot.forEach((docSnap) => {
-          classes.push(docSnap.data() as ClassItem);
+          const cls = docSnap.data() as ClassItem;
+          if (deletedIds.includes(cls.classId)) {
+            // Delete from Firestore so it doesn't resurrect
+            deleteDoc(doc(db, 'classes', cls.classId)).catch(() => {});
+          } else {
+            classes.push(cls);
+          }
         });
-        if (classes.length > 0) {
-          this.setItem(STORAGE_KEYS.CLASSES, classes);
-        }
+        this.setItem(STORAGE_KEYS.CLASSES, classes);
         window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
       }, (err) => {
         console.warn('Firestore classes snapshot error:', err);
@@ -312,16 +354,22 @@ export class StorageService {
       // Seed users
       const usersSnap = await getDocs(collection(db, 'users'));
       if (usersSnap.empty) {
+        const deletedUserIds = this.getDeletedUserIds();
         for (const user of INITIAL_USERS) {
-          await setDoc(doc(db, 'users', user.userId), user, { merge: true });
+          if (!deletedUserIds.includes(user.userId)) {
+            await setDoc(doc(db, 'users', user.userId), user, { merge: true });
+          }
         }
       }
 
       // Seed classes
       const classesSnap = await getDocs(collection(db, 'classes'));
       if (classesSnap.empty) {
+        const deletedClassIds = this.getDeletedClassIds();
         for (const cls of INITIAL_CLASSES) {
-          await setDoc(doc(db, 'classes', cls.classId), cls, { merge: true });
+          if (!deletedClassIds.includes(cls.classId)) {
+            await setDoc(doc(db, 'classes', cls.classId), cls, { merge: true });
+          }
         }
       }
     } catch (err) {
@@ -335,6 +383,8 @@ export class StorageService {
   }
 
   public static resetToDemo(): void {
+    this.setItem(STORAGE_KEYS.DELETED_CLASSES, []);
+    this.setItem(STORAGE_KEYS.DELETED_USERS, []);
     this.setItem(STORAGE_KEYS.USERS, INITIAL_USERS);
     this.setItem(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
     this.setItem(STORAGE_KEYS.SESSIONS, []);
@@ -345,7 +395,9 @@ export class StorageService {
 
   // User Management
   public static getUsers(): User[] {
-    const users = this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const deleted = this.getDeletedUserIds();
+    const rawUsers = this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const users = rawUsers.filter(u => !deleted.includes(u.userId));
     // Ensure Admin1 is always present in users list
     if (!users.some(u => u.userId.toLowerCase() === 'admin1' || u.role === 'admin')) {
       const adminUser: User = {
@@ -459,15 +511,25 @@ export class StorageService {
   }
 
   public static deleteUser(userId: string): boolean {
+    this.addDeletedUserId(userId);
     let users = this.getUsers();
     users = users.filter(u => u.userId !== userId);
     this.setItem(STORAGE_KEYS.USERS, users);
+
+    // Delete permanently from Cloud Firestore
+    deleteDoc(doc(db, 'users', userId)).catch(err => {
+      console.warn('Firestore deleteUser error:', err);
+    });
+
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
     return true;
   }
 
   // Class Management
   public static getClasses(): ClassItem[] {
-    return this.getItem<ClassItem[]>(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
+    const deleted = this.getDeletedClassIds();
+    const classes = this.getItem<ClassItem[]>(STORAGE_KEYS.CLASSES, INITIAL_CLASSES);
+    return classes.filter(c => !deleted.includes(c.classId));
   }
 
   public static getClassById(classId: string): ClassItem | undefined {
@@ -475,6 +537,7 @@ export class StorageService {
   }
 
   public static addClass(cls: ClassItem): ClassItem {
+    this.removeDeletedClassId(cls.classId);
     const classes = this.getClasses();
     const existing = classes.find(c => c.classId.toLowerCase() === cls.classId.toLowerCase());
     if (existing) {
@@ -494,9 +557,23 @@ export class StorageService {
   }
 
   public static deleteClass(classId: string): void {
+    // 1. Mark as permanently deleted in persistent set
+    this.addDeletedClassId(classId);
+
+    // 2. Remove from local classes list
     let classes = this.getClasses();
     classes = classes.filter(c => c.classId !== classId);
     this.setItem(STORAGE_KEYS.CLASSES, classes);
+
+    // 3. Delete permanently from Cloud Firestore
+    deleteDoc(doc(db, 'classes', classId)).catch(err => {
+      console.warn('Firestore deleteClass error:', err);
+    });
+
+    // 4. Also clean up any timetable entries assigned to this class
+    const timetable = this.getTimeTable().filter(l => l.classId !== classId);
+    this.setItem(STORAGE_KEYS.TIMETABLE, timetable);
+
     window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
   }
 
