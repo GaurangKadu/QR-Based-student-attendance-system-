@@ -332,8 +332,8 @@ export const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
                     {displayedRoster.length > 0 ? (
                       displayedRoster.map(student => (
                         <tr key={student.userId} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
-                          <td className="p-3 font-bold text-slate-900 dark:text-white">#{student.rollNo}</td>
-                          <td className="p-3 font-bold text-slate-800 dark:text-slate-200">{student.name}</td>
+                          <td className="p-3 font-bold text-slate-900 dark:text-white cursor-pointer hover:text-blue-600" onClick={() => setHistoryStudent(student)}>#{student.rollNo}</td>
+                          <td className="p-3 font-bold text-slate-800 dark:text-slate-200 cursor-pointer hover:text-blue-600" onClick={() => setHistoryStudent(student)}>{student.name}</td>
                           <td className="p-3 font-mono text-slate-600 dark:text-slate-400">{student.userId}</td>
                           <td className="p-3">
                             <button
@@ -524,6 +524,10 @@ export const ClassDetailModal: React.FC<ClassDetailModalProps> = ({
               </div>
             </div>
           </div>
+        )}
+        {/* Modal: Student History & Attendance Record */}
+        {historyStudent && (
+          <StudentHistoryModal student={historyStudent} onClose={() => setHistoryStudent(null)} />
         )}
       </div>
     </div>

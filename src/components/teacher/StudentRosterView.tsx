@@ -3,12 +3,14 @@ import * as XLSX from 'xlsx';
 import { StorageService } from '../../services/storageService';
 import { User, ClassItem } from '../../types';
 import { Users, Search, Plus, Upload, Download, Filter, X, Check, AlertCircle } from 'lucide-react';
+import { ViewToggle } from '../common/ViewToggle';
 
 export const StudentRosterView: React.FC = () => {
   const [students, setStudents] = useState<User[]>(StorageService.getStudents());
   const [classes, setClasses] = useState<ClassItem[]>(StorageService.getClasses());
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedClassFilter, setSelectedClassFilter] = useState('ALL');
+  const [viewMode, setViewMode] = useState<'table' | 'card'>('table');
 
   // Modal States
   const [showAddModal, setShowAddModal] = useState(false);
@@ -200,7 +202,7 @@ export const StudentRosterView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -254,6 +256,7 @@ export const StudentRosterView: React.FC = () => {
 
       {/* Filter Controls */}
       <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col sm:flex-row items-center gap-3">
+        <ViewToggle viewMode={viewMode} setViewMode={setViewMode} />
         <div className="flex-1 w-full relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
@@ -283,51 +286,69 @@ export const StudentRosterView: React.FC = () => {
       </div>
 
       {/* Roster Table */}
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 uppercase tracking-wider">
-              <tr>
-                <th className="p-3">Student ID</th>
-                <th className="p-3">Roll No</th>
-                <th className="p-3">Name</th>
-                <th className="p-3">Class</th>
-                <th className="p-3 text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 font-normal">
-              {filteredStudents.length > 0 ? (
-                filteredStudents.map(student => {
-                  const studentClass = StorageService.getClassById(student.classId || '');
-                  return (
-                    <tr key={student.userId} className="hover:bg-slate-50 transition">
-                      <td className="p-3 font-mono font-medium text-slate-800">{student.userId}</td>
-                      <td className="p-3 font-mono text-slate-600">{student.rollNo || 'N/A'}</td>
-                      <td className="p-3 font-medium text-slate-900">{student.name}</td>
-                      <td className="p-3 text-slate-600">{studentClass?.className || 'Unassigned'}</td>
-                      <td className="p-3 text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium border ${
-                          student.status === 'active'
-                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            : 'bg-slate-100 text-slate-600 border-slate-200'
-                        }`}>
-                          {student.status === 'active' ? 'Active' : 'Deactivated'}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
-                <tr>
-                  <td colSpan={5} className="p-6 text-center text-slate-400">
-                    No students found matching your filter criteria.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+      {viewMode === 'card' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {filteredStudents.map(student => {
+            const studentClass = StorageService.getClassById(student.classId || '');
+            return (
+              <div key={student.userId} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+                <div className="font-bold text-slate-900">{student.name}</div>
+                <div className="text-[11px] font-mono text-slate-500">{student.userId}</div>
+                <div className="mt-3 text-xs text-slate-600">
+                  <div>Roll: <span className="font-mono font-medium">{student.rollNo || 'N/A'}</span></div>
+                  <div>Class: {studentClass?.className || 'Unassigned'}</div>
+                </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 uppercase tracking-wider">
+                <tr>
+                  <th className="p-3">Student ID</th>
+                  <th className="p-3">Roll No</th>
+                  <th className="p-3">Name</th>
+                  <th className="p-3">Class</th>
+                  <th className="p-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-normal">
+                {filteredStudents.length > 0 ? (
+                  filteredStudents.map(student => {
+                    const studentClass = StorageService.getClassById(student.classId || '');
+                    return (
+                      <tr key={student.userId} className="hover:bg-slate-50 transition">
+                        <td className="p-3 font-mono font-medium text-slate-800">{student.userId}</td>
+                        <td className="p-3 font-mono text-slate-600">{student.rollNo || 'N/A'}</td>
+                        <td className="p-3 font-medium text-slate-900">{student.name}</td>
+                        <td className="p-3 text-slate-600">{studentClass?.className || 'Unassigned'}</td>
+                        <td className="p-3 text-right">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-medium border ${
+                            student.status === 'active'
+                              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                              : 'bg-slate-100 text-slate-600 border-slate-200'
+                          }`}>
+                            {student.status === 'active' ? 'Active' : 'Deactivated'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-slate-400">
+                      No students found matching your filter criteria.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Add Student Modal */}
       {showAddModal && (

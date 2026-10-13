@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { User } from '../../types';
 import { X, CheckCircle2, XCircle, Users } from 'lucide-react';
+import { StudentHistoryModal } from './StudentHistoryModal';
 
 interface ClassStudentsListModalProps {
   className: string;
@@ -17,6 +18,8 @@ export const ClassStudentsListModal: React.FC<ClassStudentsListModalProps> = ({
   students,
   onClose,
 }) => {
+  const [historyStudent, setHistoryStudent] = useState<User | null>(null);
+
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-800 transition-colors">
@@ -37,7 +40,8 @@ export const ClassStudentsListModal: React.FC<ClassStudentsListModalProps> = ({
             students.map(student => (
               <div
                 key={student.userId}
-                className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60"
+                onClick={() => setHistoryStudent(student)}
+                className="flex items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/60 dark:border-slate-700/60 cursor-pointer hover:border-blue-500 hover:bg-blue-50/20 transition"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-xl bg-blue-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
@@ -84,6 +88,10 @@ export const ClassStudentsListModal: React.FC<ClassStudentsListModalProps> = ({
           </button>
         </div>
       </div>
+
+      {historyStudent && (
+        <StudentHistoryModal student={historyStudent} onClose={() => setHistoryStudent(null)} />
+      )}
     </div>
   );
 };

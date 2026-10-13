@@ -81,7 +81,7 @@ export const GeofenceSettingsView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 w-full max-w-7xl mx-auto">
       {/* Header */}
       <div>
         <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">

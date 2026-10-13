@@ -13,6 +13,14 @@ import {
   ArrowRight,
   SwitchCamera
 } from 'lucide-react';
+import {
+  playClickSound,
+  playPopSound,
+  playScanSound,
+  playSuccessSound,
+  playWarningSound,
+  playErrorSound
+} from '../../utils/soundEffects';
 
 interface StudentQRScannerModalProps {
   student: User;
@@ -137,6 +145,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     }
 
     console.log('QR_PAYLOAD_PARSED', { rawPayload: trimmed, extractedIdentifier: targetIdentifier });
+    playScanSound();
 
     // Stop camera immediately
     stopCameraStream();
@@ -152,6 +161,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
     // 3. Verify session exists and is active
     if (!session || session.status !== 'active') {
+      playErrorSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       setScanResult({
@@ -167,6 +177,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     const currentStudent = studentRef.current;
     const studentUser = StorageService.getUserById(currentStudent.userId) || currentStudent;
     if (!studentUser || studentUser.status === 'deactivated') {
+      playErrorSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       setScanResult({
@@ -178,6 +189,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
     // 5. Verify student.classId === session.classId
     if (studentUser.classId !== session.classId) {
+      playErrorSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       const studentClass = StorageService.getClassById(studentUser.classId || '');
@@ -193,6 +205,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     const existingRecords = StorageService.getAttendanceRecords();
     const isDuplicate = existingRecords.some(r => r.sessionId === session.sessionId && r.studentId === studentUser.userId);
     if (isDuplicate) {
+      playWarningSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       setScanResult({
@@ -205,6 +218,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     // 7. Verify class geofence is configured
     const classItem = StorageService.getClassById(session.classId);
     if (!classItem || classItem.latitude === undefined || classItem.longitude === undefined) {
+      playErrorSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       setScanResult({
@@ -217,6 +231,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
     // 8. Request student GPS location
     console.log('GPS_REQUEST_STARTED');
     if (!navigator.geolocation) {
+      playErrorSound();
       isProcessingRef.current = false;
       setIsProcessing(false);
       setScanResult({
@@ -247,6 +262,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
         if (res.success && res.record) {
           console.log('ATTENDANCE_WRITE_SUCCESS', res.record.attendanceId);
+          playSuccessSound();
           setScanResult({
             type: 'success',
             message: 'Location verified. You are inside the classroom.',
@@ -261,22 +277,26 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
         } else {
           const msg = (res.message || '').toLowerCase();
           if (msg.includes('already') || msg.includes('duplicate')) {
+            playWarningSound();
             setScanResult({
               type: 'duplicate',
               message: 'Your attendance has already been recorded for this session.',
             });
           } else if (msg.includes('location permission')) {
+            playErrorSound();
             setScanResult({
               type: 'location_error',
               message: 'Location permission is required to mark attendance.',
             });
           } else if (msg.includes('outside')) {
+            playErrorSound();
             setScanResult({
               type: 'error',
               message: res.message || 'You are outside the classroom area.',
               distance: res.distance,
             });
           } else {
+            playErrorSound();
             setScanResult({
               type: 'error',
               message: res.message || 'Unable to record attendance.',
@@ -288,6 +308,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
       (geoErr) => {
         console.warn('GPS_DENIED_OR_FAILED', geoErr);
         if (!isMountedRef.current) return;
+        playErrorSound();
         isProcessingRef.current = false;
         setIsProcessing(false);
         setScanResult({
@@ -585,22 +606,23 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-xl border border-slate-200 shadow-lg max-w-md w-full p-5 sm:p-6 text-center relative">
+      <div className="nm-card max-w-md w-full p-5 sm:p-6 text-center relative border border-white/85 animate-nm-pop shadow-[8px_8px_24px_rgba(164,177,196,0.35),-8px_-8px_24px_rgba(255,255,255,0.95)]">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-200/60 mb-4">
           <div className="text-left">
-            <h2 className="text-base font-bold text-slate-900">Scan Attendance QR</h2>
+            <h2 className="text-base font-bold text-slate-800 tracking-tight">Scan Attendance QR</h2>
             <p className="text-xs text-slate-500">Provide the attendance QR code displayed by your teacher.</p>
           </div>
           <button
             type="button"
             onClick={() => {
+              playClickSound();
               stopCameraStream();
               onClose();
             }}
-            className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100"
+            className="p-1.5 nm-icon-btn text-slate-500 hover:text-slate-800 cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
@@ -609,20 +631,21 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
           <div className="py-4 space-y-4">
             {scanResult.type === 'success' && (
               <div className="space-y-3">
-                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto ring-4 ring-emerald-50">
-                  <Check className="w-6 h-6" />
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto ring-4 ring-emerald-50 shadow-[4px_4px_12px_rgba(16,185,129,0.25)]">
+                  <Check className="w-7 h-7" />
                 </div>
-                <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-lg text-xs font-medium space-y-1">
+                <div className="p-3.5 bg-emerald-50/90 border border-emerald-200/80 text-emerald-900 rounded-xl text-xs font-medium space-y-1 shadow-xs">
                   <p className="font-bold text-sm text-emerald-800">✓ Attendance Marked</p>
                   <p className="text-[11px] text-emerald-700">Your location has been verified. You are inside the classroom.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => {
+                    playClickSound();
                     stopCameraStream();
                     onClose();
                   }}
-                  className="mt-1 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
+                  className="mt-1 w-full py-2.5 nm-btn-primary font-semibold text-xs rounded-xl shadow-md transition cursor-pointer"
                 >
                   DONE
                 </button>
@@ -631,18 +654,19 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
             {scanResult.type === 'duplicate' && (
               <div className="space-y-3">
-                <div className="w-12 h-12 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center mx-auto">
-                  <Check className="w-6 h-6" />
+                <div className="w-14 h-14 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center mx-auto shadow-[4px_4px_12px_rgba(37,99,235,0.2)]">
+                  <Check className="w-7 h-7" />
                 </div>
                 <h3 className="text-base font-bold text-slate-900">✓ Attendance Already Marked</h3>
                 <p className="text-xs text-slate-600">{scanResult.message}</p>
                 <button
                   type="button"
                   onClick={() => {
+                    playClickSound();
                     stopCameraStream();
                     onClose();
                   }}
-                  className="mt-2 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
+                  className="mt-2 w-full py-2.5 nm-btn-primary font-semibold text-xs rounded-xl transition cursor-pointer"
                 >
                   DONE
                 </button>
@@ -651,25 +675,26 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
             {(scanResult.type === 'error' || scanResult.type === 'location_error' || scanResult.type === 'expired' || scanResult.type === 'invalid_code') && (
               <div className="space-y-3">
-                <div className="w-12 h-12 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto">
-                  <AlertCircle className="w-6 h-6" />
+                <div className="w-14 h-14 bg-rose-100 text-rose-700 rounded-full flex items-center justify-center mx-auto shadow-[4px_4px_12px_rgba(225,29,72,0.2)]">
+                  <AlertCircle className="w-7 h-7" />
                 </div>
                 <h3 className="text-base font-bold text-rose-700">✕ Attendance Not Marked</h3>
                 <p className="text-xs text-slate-600">{scanResult.message}</p>
                 {scanResult.distance !== undefined && (
-                  <p className="text-[11px] font-mono text-slate-500">
+                  <p className="text-[11px] font-mono text-slate-500 tabular-nums">
                     Required radius: 50 metres (Your distance: {scanResult.distance}m)
                   </p>
                 )}
                 <button
                   type="button"
                   onClick={() => {
+                    playClickSound();
                     setScanResult(null);
                     isProcessingRef.current = false;
                     setIsProcessing(false);
                     if (activeTab === 'camera') startCameraStream();
                   }}
-                  className="mt-2 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg transition cursor-pointer"
+                  className="mt-2 w-full py-2.5 nm-btn-primary font-semibold text-xs rounded-xl transition cursor-pointer"
                 >
                   TRY AGAIN
                 </button>
@@ -679,16 +704,17 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
         ) : (
           <div className="space-y-4">
             {/* 3 Input Method Option Selector Tabs */}
-            <div className="grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-lg text-[11px] font-medium">
+            <div className="grid grid-cols-3 gap-1.5 p-1.5 nm-inset rounded-xl text-xs font-medium">
               <button
                 type="button"
                 onClick={() => {
+                  playPopSound();
                   setActiveTab('camera');
                   setUploadError(null);
                 }}
-                className={`py-1.5 rounded transition cursor-pointer ${
+                className={`py-2 px-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'camera'
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                    ? 'nm-tab-active text-blue-600 font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -697,13 +723,14 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  playPopSound();
                   setActiveTab('upload');
                   setUploadError(null);
                   stopCameraStream();
                 }}
-                className={`py-1.5 rounded transition cursor-pointer ${
+                className={`py-2 px-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'upload'
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                    ? 'nm-tab-active text-blue-600 font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -712,13 +739,14 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  playPopSound();
                   setActiveTab('manual');
                   setUploadError(null);
                   stopCameraStream();
                 }}
-                className={`py-1.5 rounded transition cursor-pointer ${
+                className={`py-2 px-1 rounded-lg transition-all cursor-pointer ${
                   activeTab === 'manual'
-                    ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                    ? 'nm-tab-active text-blue-600 font-semibold'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -730,7 +758,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
             {activeTab === 'camera' && (
               <div className="space-y-3">
                 {/* Always keep video element mounted so ref is continuously valid */}
-                <div className="relative w-full aspect-square bg-slate-950 rounded-lg overflow-hidden border border-slate-300 flex items-center justify-center">
+                <div className="relative w-full aspect-square bg-slate-950 rounded-2xl overflow-hidden border border-slate-300/80 flex items-center justify-center shadow-inner">
                   <video
                     ref={videoRef}
                     className="w-full h-full object-cover"
@@ -740,15 +768,34 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                   />
                   <canvas ref={canvasRef} className="hidden" />
 
+                  {/* Corner Reticle & Animated Scan Beam */}
+                  {cameraPermissionState === 'granted' && !isProcessing && (
+                    <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-10">
+                      <div className="relative w-48 h-48 sm:w-56 sm:h-56 border border-white/20 rounded-2xl overflow-hidden">
+                        {/* 4 Corner Markers */}
+                        <div className="absolute top-0 left-0 w-5 h-5 border-t-2 border-l-2 border-blue-400 rounded-tl-lg" />
+                        <div className="absolute top-0 right-0 w-5 h-5 border-t-2 border-r-2 border-blue-400 rounded-tr-lg" />
+                        <div className="absolute bottom-0 left-0 w-5 h-5 border-b-2 border-l-2 border-blue-400 rounded-bl-lg" />
+                        <div className="absolute bottom-0 right-0 w-5 h-5 border-b-2 border-r-2 border-blue-400 rounded-br-lg" />
+
+                        {/* High-tech Scanning Beam */}
+                        <div className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent shadow-[0_0_10px_rgba(96,165,250,1)] animate-scan-beam" />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Camera Flip Button Overlay */}
                   {cameraPermissionState === 'granted' && (
                     <button
                       type="button"
-                      onClick={toggleCameraFacingMode}
+                      onClick={() => {
+                        playClickSound();
+                        toggleCameraFacingMode();
+                      }}
                       title="Switch Camera (Front/Back)"
-                      className="absolute top-2 right-2 p-2 bg-slate-900/70 hover:bg-slate-900 text-white rounded-lg backdrop-blur-xs text-xs z-10 transition cursor-pointer"
+                      className="absolute top-2.5 right-2.5 p-2 nm-btn text-slate-800 rounded-xl text-xs z-20 transition cursor-pointer shadow-md"
                     >
-                      <SwitchCamera className="w-4 h-4" />
+                      <SwitchCamera className="w-4 h-4 text-blue-600" />
                     </button>
                   )}
 
@@ -762,15 +809,15 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
                   {/* Processing State */}
                   {isProcessing && (
-                    <div className="absolute inset-0 bg-slate-950/70 text-white flex flex-col items-center justify-center gap-2 text-xs font-semibold">
-                      <RefreshCw className="w-5 h-5 animate-spin text-blue-400" />
+                    <div className="absolute inset-0 bg-slate-950/75 text-white flex flex-col items-center justify-center gap-2 text-xs font-semibold backdrop-blur-2xs z-20">
+                      <RefreshCw className="w-6 h-6 animate-spin text-blue-400" />
                       <span>Verifying GPS & Attendance...</span>
                     </div>
                   )}
 
                   {/* Error / Denied / Unsupported State Overlay */}
                   {(cameraPermissionState === 'denied' || cameraPermissionState === 'unsupported') && (
-                    <div className="absolute inset-0 bg-white p-4 text-xs space-y-3 text-left flex flex-col justify-between overflow-y-auto">
+                    <div className="absolute inset-0 bg-white p-4 text-xs space-y-3 text-left flex flex-col justify-between overflow-y-auto z-20">
                       <div className="space-y-2">
                         <p className="font-bold text-slate-800 flex items-center gap-1.5">
                           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
@@ -801,17 +848,23 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                         <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={startCameraStream}
-                            className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-semibold hover:bg-slate-800 cursor-pointer"
+                            onClick={() => {
+                              playClickSound();
+                              startCameraStream();
+                            }}
+                            className="px-3.5 py-2 nm-btn-primary rounded-xl text-xs font-semibold cursor-pointer shadow-sm"
                           >
                             TRY AGAIN
                           </button>
                           <button
                             type="button"
-                            onClick={toggleCameraFacingMode}
-                            className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded text-xs font-semibold hover:bg-slate-50 cursor-pointer inline-flex items-center gap-1"
+                            onClick={() => {
+                              playClickSound();
+                              toggleCameraFacingMode();
+                            }}
+                            className="px-3.5 py-2 nm-btn text-slate-700 rounded-xl text-xs font-semibold cursor-pointer inline-flex items-center gap-1.5"
                           >
-                            <SwitchCamera className="w-3.5 h-3.5" />
+                            <SwitchCamera className="w-3.5 h-3.5 text-blue-600" />
                             <span>FLIP CAMERA</span>
                           </button>
                         </div>
@@ -821,15 +874,21 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                           <div className="grid grid-cols-2 gap-2">
                             <button
                               type="button"
-                              onClick={() => setActiveTab('upload')}
-                              className="py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-800 font-medium text-xs cursor-pointer"
+                              onClick={() => {
+                                playPopSound();
+                                setActiveTab('upload');
+                              }}
+                              className="py-2 nm-btn rounded-xl text-slate-800 font-medium text-xs cursor-pointer"
                             >
                               Upload QR
                             </button>
                             <button
                               type="button"
-                              onClick={() => setActiveTab('manual')}
-                              className="py-1.5 bg-white border border-slate-300 hover:bg-slate-50 rounded text-slate-800 font-medium text-xs cursor-pointer"
+                              onClick={() => {
+                                playPopSound();
+                                setActiveTab('manual');
+                              }}
+                              className="py-2 nm-btn rounded-xl text-slate-800 font-medium text-xs cursor-pointer"
                             >
                               Enter Code
                             </button>
@@ -851,8 +910,8 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
             {/* TAB 2: Upload QR Image */}
             {activeTab === 'upload' && (
               <div className="space-y-3 py-2">
-                <div className="border-2 border-dashed border-slate-200 hover:border-slate-300 rounded-lg p-6 text-center space-y-3 bg-slate-50">
-                  <div className="p-3 bg-white border border-slate-200 rounded-full inline-block text-slate-600 shadow-2xs">
+                <div className="border-2 border-dashed border-slate-300/80 hover:border-blue-400 rounded-2xl p-6 text-center space-y-3 bg-[#f8fafc] nm-inset transition-colors">
+                  <div className="p-3.5 nm-btn rounded-2xl inline-block text-slate-600 shadow-sm">
                     <FileImage className="w-6 h-6 text-blue-600" />
                   </div>
                   <div>
@@ -862,8 +921,11 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
 
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className="py-2 px-4 bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold rounded-lg cursor-pointer inline-flex items-center gap-1.5"
+                    onClick={() => {
+                      playClickSound();
+                      fileInputRef.current?.click();
+                    }}
+                    className="py-2.5 px-4 nm-btn-primary text-xs font-semibold rounded-xl cursor-pointer inline-flex items-center gap-1.5 shadow-md"
                   >
                     <Upload className="w-3.5 h-3.5" />
                     <span>SELECT QR IMAGE</span>
@@ -879,14 +941,14 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                 </div>
 
                 {uploadError && (
-                  <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-medium flex items-center gap-1.5 text-left">
+                  <div className="p-3 bg-rose-50/90 border border-rose-200/80 text-rose-700 rounded-xl text-xs font-medium flex items-center gap-1.5 text-left shadow-2xs">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{uploadError}</span>
                   </div>
                 )}
 
                 {isProcessing && (
-                  <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs font-medium flex items-center justify-center gap-2">
+                  <div className="p-3 bg-blue-50/90 border border-blue-200/80 text-blue-800 rounded-xl text-xs font-medium flex items-center justify-center gap-2 shadow-2xs">
                     <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                     <span>Verifying GPS & Attendance...</span>
                   </div>
@@ -899,7 +961,7 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
               <div className="space-y-3 py-2 text-left">
                 <form onSubmit={handleManualFormSubmit} className="space-y-3">
                   <div>
-                    <label className="block text-xs font-bold text-slate-900 mb-1">
+                    <label className="block text-xs font-bold text-slate-800 mb-1.5">
                       Enter Attendance QR Code
                     </label>
                     <input
@@ -907,16 +969,16 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                       value={manualInputText}
                       onChange={e => setManualInputText(e.target.value)}
                       placeholder="e.g. SESS_1740000000000 or Daily Code"
-                      className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono text-slate-900 focus:outline-none focus:border-blue-600"
+                      className="w-full px-3.5 py-2.5 nm-input text-xs font-mono text-slate-900 focus:outline-none placeholder-slate-400"
                       required
                     />
-                    <p className="text-[11px] text-slate-500 mt-1">
+                    <p className="text-[11px] text-slate-500 mt-1.5">
                       Enter the unique session code or payload text generated for the class session.
                     </p>
                   </div>
 
                   {isProcessing ? (
-                    <div className="p-3 bg-blue-50 border border-blue-200 text-blue-800 rounded-lg text-xs font-medium flex items-center justify-center gap-2">
+                    <div className="p-3 bg-blue-50/90 border border-blue-200/80 text-blue-800 rounded-xl text-xs font-medium flex items-center justify-center gap-2 shadow-2xs">
                       <RefreshCw className="w-4 h-4 animate-spin text-blue-600" />
                       <span>Verifying GPS & Attendance...</span>
                     </div>
@@ -924,7 +986,8 @@ export const StudentQRScannerModal: React.FC<StudentQRScannerModalProps> = ({
                     <button
                       type="submit"
                       disabled={!manualInputText.trim()}
-                      className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 disabled:opacity-50 text-white font-semibold text-xs rounded-lg cursor-pointer flex items-center justify-center gap-1.5"
+                      onClick={playClickSound}
+                      className="w-full py-2.5 nm-btn-primary disabled:opacity-50 font-semibold text-xs rounded-xl cursor-pointer flex items-center justify-center gap-1.5 shadow-md mt-2"
                     >
                       <span>CONTINUE</span>
                       <ArrowRight className="w-3.5 h-3.5" />

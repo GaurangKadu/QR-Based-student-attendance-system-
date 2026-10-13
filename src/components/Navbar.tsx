@@ -100,6 +100,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <RotateCcw className="w-4 h-4" />
                 </button>
 
+                {/* Refresh Data Button */}
+                <button
+                  onClick={() => window.dispatchEvent(new Event('qr_attendance_updated'))}
+                  title="Refresh Data"
+                  className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+
                 {/* Logout Button */}
                 <button
                   onClick={handleLogout}

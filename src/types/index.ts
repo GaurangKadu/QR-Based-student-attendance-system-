@@ -1,11 +1,12 @@
 export interface User {
-  userId: string;       // Unique ID e.g., Teacher1 or STU101
+  userId: string;       // Unique ID e.g., Admin1, Teacher1, or STU101
   name: string;
   email: string;        // Login ID or Email
   password?: string;    // Auth credential
-  role: 'teacher' | 'student';
+  role: 'admin' | 'teacher' | 'student';
   rollNo?: string;      // e.g., 201
   classId?: string;     // Reference to classes collection
+  department?: string;  // e.g., "Information Technology"
   qrId?: string;        // Unique QR payload identifier
   status: 'active' | 'deactivated';
   createdAt: string;
@@ -18,6 +19,8 @@ export interface ClassItem {
   semester: string;     // e.g., "SEM IV"
   division: string;     // e.g., "A"
   subject: string;      // e.g., "Data Structures"
+  teacherId?: string;   // Assigned teacher ID e.g., "Teacher1"
+  teacherName?: string; // Assigned teacher name
   totalStudents?: number; // e.g., 60
   classroomName?: string;
   latitude?: number;

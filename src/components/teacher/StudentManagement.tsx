@@ -255,13 +255,13 @@ export const StudentManagement: React.FC<{ initialClassId?: string }> = ({ initi
                       <td className="p-4 font-bold text-slate-900 dark:text-white cursor-pointer hover:text-blue-600" onClick={() => setHistoryStudent(student)}>
                         #{student.rollNo || 'N/A'}
                       </td>
-                      <td className="p-4">
+                      <td className="p-4 cursor-pointer hover:text-blue-600 group-hover:bg-slate-100/50" onClick={() => setHistoryStudent(student)}>
                         <div className="flex items-center gap-2.5">
                           <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300 font-bold flex items-center justify-center text-xs shrink-0">
                             {student.name.charAt(0)}
                           </div>
                           <div>
-                            <p className="font-bold text-slate-800 dark:text-slate-200">{student.name}</p>
+                            <p className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-blue-600">{student.name}</p>
                             <p className="text-[10px] text-slate-400">Pass: {student.password || '******'}</p>
                           </div>
                         </div>

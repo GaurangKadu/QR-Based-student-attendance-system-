@@ -32,6 +32,8 @@ const INITIAL_CLASSES: ClassItem[] = [
     subject: 'Data Structures & Algorithms',
     totalStudents: 60,
     classroomName: 'Room 201 (Theory Hall)',
+    teacherId: 'Teacher1',
+    teacherName: 'Prof. Rajesh Sharma',
     latitude: 19.0760,
     longitude: 72.8777,
     radius: 50,
@@ -46,6 +48,8 @@ const INITIAL_CLASSES: ClassItem[] = [
     subject: 'Database Management Systems',
     totalStudents: 60,
     classroomName: 'Room 202 (Theory Hall)',
+    teacherId: 'Teacher1',
+    teacherName: 'Prof. Rajesh Sharma',
     latitude: 19.0760,
     longitude: 72.8777,
     radius: 50,
@@ -60,6 +64,8 @@ const INITIAL_CLASSES: ClassItem[] = [
     subject: 'Software Engineering',
     totalStudents: 55,
     classroomName: 'Room 301 (Theory Hall)',
+    teacherId: 'Teacher1',
+    teacherName: 'Prof. Rajesh Sharma',
     latitude: 19.0760,
     longitude: 72.8777,
     radius: 50,
@@ -69,11 +75,22 @@ const INITIAL_CLASSES: ClassItem[] = [
 
 const INITIAL_USERS: User[] = [
   {
+    userId: 'Admin1',
+    name: 'System Administrator',
+    email: 'Admin1',
+    password: 'Admin@12345',
+    role: 'admin',
+    department: 'IT Administration',
+    status: 'active',
+    createdAt: new Date().toISOString(),
+  },
+  {
     userId: 'Teacher1',
     name: 'Prof. Rajesh Sharma',
     email: 'Teacher1',
     password: 'Class1',
     role: 'teacher',
+    department: 'Information Technology',
     status: 'active',
     createdAt: new Date().toISOString(),
   },
@@ -328,11 +345,35 @@ export class StorageService {
 
   // User Management
   public static getUsers(): User[] {
-    return this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const users = this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    // Ensure Admin1 is always present in users list
+    if (!users.some(u => u.userId.toLowerCase() === 'admin1' || u.role === 'admin')) {
+      const adminUser: User = {
+        userId: 'Admin1',
+        name: 'System Administrator',
+        email: 'Admin1',
+        password: 'Admin@12345',
+        role: 'admin',
+        department: 'IT Administration',
+        status: 'active',
+        createdAt: new Date().toISOString(),
+      };
+      users.unshift(adminUser);
+      this.setItem(STORAGE_KEYS.USERS, users);
+    }
+    return users;
   }
 
   public static getStudents(): User[] {
     return this.getUsers().filter(u => u.role === 'student');
+  }
+
+  public static getTeachers(): User[] {
+    return this.getUsers().filter(u => u.role === 'teacher');
+  }
+
+  public static getAdmins(): User[] {
+    return this.getUsers().filter(u => u.role === 'admin');
   }
 
   public static getUserById(userId: string): User | undefined {
@@ -459,6 +500,19 @@ export class StorageService {
     window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
   }
 
+  public static updateClass(classId: string, updates: Partial<ClassItem>): ClassItem | undefined {
+    const classes = this.getClasses();
+    const index = classes.findIndex(c => c.classId === classId);
+    if (index === -1) return undefined;
+    classes[index] = { ...classes[index], ...updates };
+    this.setItem(STORAGE_KEYS.CLASSES, classes);
+    setDoc(doc(db, 'classes', classId), classes[index], { merge: true }).catch(err => {
+      console.warn('Firestore updateClass error:', err);
+    });
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+    return classes[index];
+  }
+
   public static bulkImportStudents(newStudents: Omit<User, 'createdAt'>[]): { imported: number; errors: { row: number; studentId: string; reason: string }[] } {
     const existingUsers = this.getUsers();
     const existingIds = new Set(existingUsers.map(u => u.userId.toLowerCase()));
@@ -572,6 +626,21 @@ export class StorageService {
     });
 
     return newSession;
+  }
+
+  public static refreshSessionCode(sessionId: string): AttendanceSession | undefined {
+    const sessions = this.getSessions();
+    const session = sessions.find(s => s.sessionId === sessionId);
+    if (!session) return undefined;
+
+    session.dailyCode = generateDailyCode();
+    this.setItem(STORAGE_KEYS.SESSIONS, sessions);
+
+    setDoc(doc(db, 'attendanceSessions', session.sessionId), session, { merge: true }).catch(err => {
+      console.warn('Firestore refreshSessionCode error:', err);
+    });
+
+    return session;
   }
 
   public static endSession(sessionId: string): AttendanceSession | undefined {
@@ -795,6 +864,31 @@ export class StorageService {
   private static getDayName(d: Date): DayOfWeek {
     const days: DayOfWeek[] = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     return days[d.getDay()];
+  }
+
+  public static addTimeTableLecture(lecture: TimeTableLecture): TimeTableLecture {
+    const timetable = this.getTimeTable();
+    timetable.push(lecture);
+    this.setItem(STORAGE_KEYS.TIMETABLE, timetable);
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+    return lecture;
+  }
+
+  public static deleteTimeTableLecture(id: string): void {
+    let timetable = this.getTimeTable();
+    timetable = timetable.filter(l => l.id !== id);
+    this.setItem(STORAGE_KEYS.TIMETABLE, timetable);
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+  }
+
+  public static updateTimeTableLecture(id: string, updates: Partial<TimeTableLecture>): TimeTableLecture | undefined {
+    const timetable = this.getTimeTable();
+    const index = timetable.findIndex(l => l.id === id);
+    if (index === -1) return undefined;
+    timetable[index] = { ...timetable[index], ...updates };
+    this.setItem(STORAGE_KEYS.TIMETABLE, timetable);
+    window.dispatchEvent(new CustomEvent('qr_attendance_updated'));
+    return timetable[index];
   }
 
   public static getLecturesForDate(date: Date): { lectures: TimeTableLecture[]; dayOfWeek: DayOfWeek; dateStr: string } {

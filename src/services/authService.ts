@@ -27,7 +27,7 @@ export class AuthService {
   public static login(
     idOrEmail: string,
     pass: string,
-    expectedRole?: 'teacher' | 'student'
+    expectedRole?: 'admin' | 'teacher' | 'student'
   ): { success: boolean; user?: User; message: string } {
     const trimmedId = idOrEmail.trim();
     if (!trimmedId) {
@@ -43,11 +43,16 @@ export class AuthService {
     );
 
     if (!found) {
-      return { success: false, message: 'User not found. Please check your ID or Roll Number.' };
+      return { success: false, message: 'User not found. Please check your credentials.' };
     }
 
     if (expectedRole && found.role !== expectedRole) {
-      const otherTab = found.role === 'teacher' ? 'Teacher Login' : 'Student Login';
+      const otherTab =
+        found.role === 'admin'
+          ? 'Admin Login'
+          : found.role === 'teacher'
+          ? 'Teacher Login'
+          : 'Student Login';
       return {
         success: false,
         message: `Account "${found.name}" is a ${found.role.toUpperCase()}. Please switch to the ${otherTab} tab.`

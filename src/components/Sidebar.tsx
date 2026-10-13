@@ -10,9 +10,14 @@ import {
   QrCode,
   Menu,
   X,
+  Scan,
+  History,
+  GraduationCap,
   LayoutDashboard,
-  Scan
+  Calendar
 } from 'lucide-react';
+import { playPopSound, playDeleteSound } from '../utils/soundEffects';
+import { AdminStatsCard } from './admin/AdminStatsCard';
 
 interface SidebarProps {
   currentUser: User;
@@ -32,10 +37,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => {
+    playDeleteSound();
     AuthService.logout();
     onUserChange(null);
   };
 
+  const isAdmin = currentUser.role === 'admin';
   const isTeacher = currentUser.role === 'teacher';
 
   interface NavItem {
@@ -45,11 +52,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
     action?: () => void;
   }
 
+  const adminNavItems: NavItem[] = [
+    { id: 'admin_classes', label: 'Classrooms & Teachers', icon: BookOpen },
+    { id: 'admin_teachers', label: 'Teacher IDs & Faculty', icon: GraduationCap },
+    { id: 'admin_students', label: 'Student Directory', icon: Users },
+    { id: 'admin_geofence', label: 'Campus Geofence Master', icon: MapPin },
+    { id: 'admin_reports', label: 'Attendance Logs', icon: FileText },
+    { id: 'schedule', label: 'Schedule', icon: Calendar },
+  ];
+
   const teacherNavItems: NavItem[] = [
     { id: 'attendance', label: 'Attendance', icon: BookOpen },
     { id: 'geofence', label: 'Geofence Settings', icon: MapPin },
     { id: 'students', label: 'Students', icon: Users },
     { id: 'reports', label: 'Reports', icon: FileText },
+    { id: 'schedule', label: 'Schedule', icon: Calendar },
   ];
 
   const studentNavItems: NavItem[] = [
@@ -62,11 +79,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         if (onOpenScanner) onOpenScanner();
       },
     },
+    { id: 'student_history', label: 'Attendance History', icon: History },
+    { id: 'schedule', label: 'Schedule', icon: Calendar },
   ];
 
-  const navItems = isTeacher ? teacherNavItems : studentNavItems;
+  const navItems = isAdmin ? adminNavItems : isTeacher ? teacherNavItems : studentNavItems;
 
   const handleNavClick = (item: NavItem) => {
+    playPopSound();
     if (item.action) {
       item.action();
     } else {
@@ -92,9 +112,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         </div>
 
-        <span className="text-[11px] font-medium text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded border border-slate-700 capitalize">
-          {currentUser.role}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-slate-300 bg-slate-800 px-2.5 py-0.5 rounded border border-slate-700 capitalize">
+            {currentUser.role}
+          </span>
+        </div>
       </div>
 
       {/* Mobile Backdrop */}
@@ -107,7 +129,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Desktop Sidebar */}
       <aside
-        className={`fixed lg:sticky top-0 left-0 bottom-0 z-50 lg:z-30 w-60 bg-slate-900 text-slate-200 flex flex-col justify-between transition-transform duration-200 h-screen shrink-0 ${
+        className={`fixed top-0 left-0 bottom-0 z-50 w-60 bg-slate-900 text-slate-200 flex flex-col justify-between transition-transform duration-200 h-screen shrink-0 overflow-y-auto ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         }`}
       >
@@ -125,13 +147,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* User Brief Info */}
-          <div className="p-4 border-b border-slate-800 bg-slate-950/40">
-            <p className="text-xs font-semibold text-white truncate">{currentUser.name}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5 capitalize">
-              {currentUser.role} {currentUser.rollNo ? `• Roll #${currentUser.rollNo}` : ''}
-            </p>
-          </div>
+
 
           {/* Nav Links */}
           <nav className="p-3 space-y-1">

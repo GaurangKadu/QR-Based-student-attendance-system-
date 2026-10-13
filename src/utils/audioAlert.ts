@@ -1,15 +1,36 @@
 /**
- * Audio Alert Functions (Muted for clean academic UI presentation)
+ * Audio Alert Functions wired to Web Audio API sound engine
  */
+import {
+  playSuccessSound,
+  playWarningSound,
+  playErrorSound,
+  playScanSound,
+  playClickSound,
+  playPopSound,
+  playDeleteSound,
+  soundEngine
+} from './soundEffects';
 
 export function playBigSuccessSound(): void {
-  // Muted per academic design rules
+  playSuccessSound();
 }
 
 export function playDuplicateWarningSound(): void {
-  // Muted per academic design rules
+  playWarningSound();
 }
 
-export function playErrorSound(): void {
-  // Muted per academic design rules
+export function playErrorSoundAlert(): void {
+  playErrorSound();
 }
+
+export {
+  playSuccessSound,
+  playWarningSound,
+  playErrorSound,
+  playScanSound,
+  playClickSound,
+  playPopSound,
+  playDeleteSound,
+  soundEngine
+};
